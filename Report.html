@@ -1,1 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Income, Crime, and Accidents in Canton Zurich</title>
+    <style>
+        body {
+            font-family: "Times New Roman", Times, serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1.title {
+            text-align: center;
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        .author, .date {
+            text-align: center;
+            font-size: 1.1em;
+            margin: 5px 0;
+        }
+        h2.toc-title {
+            font-size: 1.5em;
+            margin-top: 40px;
+        }
+        .toc {
+            margin: 20px 0 40px 0;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #333;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        .toc-h1 {
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .toc-h2 {
+            margin: 5px 0 5px 20px;
+        }
+        .toc-h3 {
+            margin: 3px 0 3px 40px;
+        }
+        .toc-dots {
+            flex: 1;
+            border-bottom: 1px dotted #999;
+            margin: 0 10px;
+            position: relative;
+            top: -5px;
+        }
+        .toc-entry {
+            display: flex;
+            align-items: baseline;
+        }
+        .toc-page {
+            min-width: 20px;
+            text-align: right;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin-top: 40px;
+            border-bottom: none;
+        }
+        h2 {
+            font-size: 1.3em;
+            margin-top: 30px;
+        }
+        h3 {
+            font-size: 1.1em;
+            margin-top: 25px;
+        }
+        p {
+            text-align: justify;
+        }
+        strong {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
 
+    <h1 class="title">Income, Crime, and Accidents in Canton Zurich</h1>
+    <p class="author">[Dein Name], Hans Josef Thalathara</p>
+    <p class="date">2026-01-26</p>
+
+    <h2 class="toc-title">Contents</h2>
+    <div class="toc">
+        <div class="toc-entry toc-h1"><span>1 Introduction</span><span class="toc-dots"></span><span class="toc-page">1</span></div>
+        <div class="toc-entry toc-h2"><span>1.1 Research Question</span><span class="toc-dots"></span><span class="toc-page">1</span></div>
+        <div class="toc-entry toc-h2"><span>1.2 Approach</span><span class="toc-dots"></span><span class="toc-page">1</span></div>
+        <div class="toc-entry toc-h2"><span>1.3 Hypotheses</span><span class="toc-dots"></span><span class="toc-page">1</span></div>
+        <div class="toc-entry toc-h1"><span>2 Data Sources</span><span class="toc-dots"></span><span class="toc-page">2</span></div>
+        <div class="toc-entry toc-h2"><span>2.1 Income Data</span><span class="toc-dots"></span><span class="toc-page">2</span></div>
+        <div class="toc-entry toc-h2"><span>2.2 Accident Data</span><span class="toc-dots"></span><span class="toc-page">2</span></div>
+        <div class="toc-entry toc-h2"><span>2.3 Burglary Data</span><span class="toc-dots"></span><span class="toc-page">2</span></div>
+        <div class="toc-entry toc-h1"><span>3 Cleaning and Formatting the Dataset</span><span class="toc-dots"></span><span class="toc-page">3</span></div>
+        <div class="toc-entry toc-h2"><span>3.1 Data Formatting</span><span class="toc-dots"></span><span class="toc-page">3</span></div>
+        <div class="toc-entry toc-h2"><span>3.2 Investigating Missing Values</span><span class="toc-dots"></span><span class="toc-page">3</span></div>
+        <div class="toc-entry toc-h2"><span>3.3 Joining the Datasets</span><span class="toc-dots"></span><span class="toc-page">3</span></div>
+        <div class="toc-entry toc-h1"><span>4 Exploratory Data Analysis</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
+        <div class="toc-entry toc-h2"><span>4.1 Income Distribution</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
+        <div class="toc-entry toc-h2"><span>4.2 Accident Rates by Municipality</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
+        <div class="toc-entry toc-h2"><span>4.3 Burglary Rates by Municipality</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
+        <div class="toc-entry toc-h2"><span>4.4 Correlation Overview</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
+        <div class="toc-entry toc-h1"><span>5 Modelling</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
+        <div class="toc-entry toc-h2"><span>5.1 H1: Income and Burglaries</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
+        <div class="toc-entry toc-h2"><span>5.2 H2: Income and Accidents</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
+        <div class="toc-entry toc-h2"><span>5.3 H3: Burglaries and Accidents</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
+        <div class="toc-entry toc-h1"><span>6 Chapter of Choice</span><span class="toc-dots"></span><span class="toc-page">6</span></div>
+        <div class="toc-entry toc-h1"><span>7 Conclusions</span><span class="toc-dots"></span><span class="toc-page">7</span></div>
+        <div class="toc-entry toc-h2"><span>7.1 Key Findings</span><span class="toc-dots"></span><span class="toc-page">7</span></div>
+        <div class="toc-entry toc-h2"><span>7.2 Limitations</span><span class="toc-dots"></span><span class="toc-page">7</span></div>
+        <div class="toc-entry toc-h1"><span>8 Generative AI Reflection</span><span class="toc-dots"></span><span class="toc-page">8</span></div>
+    </div>
+
+    <h1>1 Introduction</h1>
+    <p>This project explores how income levels relate to both crime (burglaries) and traffic accidents across municipalities in Canton Zurich, and whether there is an underlying relationship between crime and accident rates themselves.</p>
+
+    <h2>1.1 Research Question</h2>
+    <p>How does income level relate to both crime (burglaries) and traffic accidents across municipalities in Canton Zurich, and is there an underlying relationship between crime and accident rates themselves?</p>
+
+    <h2>1.2 Approach</h2>
+    <p>We analyse open data from Canton Zurich to investigate a triangular relationship between income, burglaries, and traffic accidents at the municipal level. By joining multiple datasets, we examine whether income predicts crime and accident rates independently, and whether crime and accidents share a connection beyond what income alone explains.</p>
+
+    <h2>1.3 Hypotheses</h2>
+    <p><strong>H1 – Income and Burglaries:</strong> Municipalities with higher average income exhibit higher burglary rates, as wealthier areas may present more attractive targets.</p>
+    <p><strong>H2 – Income and Accidents:</strong> Municipalities with higher average income exhibit lower traffic accident rates, potentially due to better infrastructure, less transit traffic, or newer vehicles.</p>
+    <p><strong>H3 – Burglaries and Accidents:</strong> Burglary rates and traffic accident rates are positively correlated across municipalities, independent of income. Both may reflect underlying factors such as population density or urbanization.</p>
+
+    <h1>2 Data Sources</h1>
+
+    <h2>2.1 Income Data</h2>
+    <p>Average taxable income by municipality (Canton Zurich).</p>
+
+    <h2>2.2 Accident Data</h2>
+    <p>Police-registered traffic accidents (Canton Zurich).</p>
+
+    <h2>2.3 Burglary Data</h2>
+    <p>Burglary statistics by municipality (Canton Zurich).</p>
+
+    <h1>3 Cleaning and Formatting the Dataset</h1>
+
+    <h2>3.1 Data Formatting</h2>
+    <p></p>
+
+    <h2>3.2 Investigating Missing Values</h2>
+    <p></p>
+
+    <h2>3.3 Joining the Datasets</h2>
+    <p></p>
+
+    <h1>4 Exploratory Data Analysis</h1>
+
+    <h2>4.1 Income Distribution</h2>
+    <p></p>
+
+    <h2>4.2 Accident Rates by Municipality</h2>
+    <p></p>
+
+    <h2>4.3 Burglary Rates by Municipality</h2>
+    <p></p>
+
+    <h2>4.4 Correlation Overview</h2>
+    <p></p>
+
+    <h1>5 Modelling</h1>
+
+    <h2>5.1 H1: Income and Burglaries</h2>
+    <p></p>
+
+    <h2>5.2 H2: Income and Accidents</h2>
+    <p></p>
+
+    <h2>5.3 H3: Burglaries and Accidents</h2>
+    <p></p>
+
+    <h1>6 Chapter of Choice</h1>
+    <p></p>
+
+    <h1>7 Conclusions</h1>
+
+    <h2>7.1 Key Findings</h2>
+    <p></p>
+
+    <h2>7.2 Limitations</h2>
+    <p></p>
+
+    <h1>8 Generative AI Reflection</h1>
+    <p></p>
+
+</body>
+</html>
