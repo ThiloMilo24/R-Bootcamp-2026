@@ -1,1 +1,13 @@
+---
+title: "Income, Crime, and Accidents in Canton Zurich"
+authors: "Hans Josef Thalathara, Thilo Holstein"
+date: "2026-01-26"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    theme: default
+---
+
 
