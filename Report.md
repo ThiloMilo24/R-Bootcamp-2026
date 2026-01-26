@@ -1,6 +1,6 @@
 # Income, Crime, and Accidents in Canton Zurich
 
-**Authors:** [Dein Name], Hans Josef Thalathara  
+**Authors:** Hans Josef Thalathara, Thilo Holstein
 **Date:** 2026-01-26
 
 ---
