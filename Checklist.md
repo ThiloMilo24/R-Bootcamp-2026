@@ -11,7 +11,7 @@
 
 #### Tertiary Dataset: Accident Data
 - [ ] https://daten.statistik.zh.ch/ogd/daten/ressourcen/KTZH_00000718_00001783.csv
-- [ ] Exclude language specific variables to reduce file size and enable Github upload
+- [x] Exclude language specific variables to reduce file size and enable Github upload
 - [ ] Create date variable (if necessary)
 - [ ] Verify joinable with primary dataset
 
