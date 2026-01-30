@@ -55,10 +55,10 @@
 #### Visualizations (5-6 different types)
 - [ ] Crime rate distribution across municipalities
 - [ ] Income distribution
-- [ ] Scatter plot: Crime rate vs. Income
-- [ ] Time series (if applicable)
+- [ ] Scatter plot: Crime rate vs. Income, Crime rate vs. Distance to Border, etc. 
 - [ ] Geographic map of Canton Zurich
 - [ ] Categorical comparisons
+- [ ] Zeitliche Entwicklungen z.B. Einkommen, Einwohner, Anzahl Einbrüche 
 
 #### Plot Quality Checks
 - [ ] No pie charts
@@ -74,7 +74,7 @@
 
 ### [ ] 5. Statistical Modeling
 
-- [ ] Choose appropriate model (e.g., `lm()`, `glm()`, `t.test()`)
+- [ ] Choose appropriate model (e.g., `lm()`, `glm()`, `t.test()`) -> poisson regression / non-binomial regression / linear model
 - [ ] Fit model(s)
 - [ ] Display model summary
 - [ ] **Interpret results in text**
