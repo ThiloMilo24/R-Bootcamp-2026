@@ -1,8 +1,11 @@
 ---
 title: "Income, Crime, and Accidents in Canton Zurich"
-author: "[Dein Name], Hans Josef Thalathara"
+author: "Thilo Holstein, Hans Josef Thalathara"
 date: "2026-01-26"
 output:
+  pdf_document:
+    toc: true
+    toc_depth: '3'
   html_document:
     toc: true
     toc_depth: 3
@@ -10,78 +13,319 @@ output:
     theme: default
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(readr)
+library(dplyr)
+library(sf)
+library(ggplot2)
+library(tidyr)
+
+source("Scripts/Data Preparation.R")
 ```
 
-# Introduction
+# 1 Introduction
 
-This project explores how income levels relate to both crime (burglaries) and traffic accidents across municipalities in Canton Zurich, and whether there is an underlying relationship between crime and accident rates themselves.
+This project explores how income levels relate to crime (burglaries) across municipalities in Canton Zurich, and whether geographic proximity to the national border plays an additional role.
 
-## Research Question
+## 1.1 Research Question
 
-How does income level relate to both crime (burglaries) and traffic accidents across municipalities in Canton Zurich, and is there an underlying relationship between crime and accident rates themselves?
+How does income level relate to burglary rates across municipalities in Canton Zurich, and does proximity to the national border act as an independent predictor of crime?
 
-## Approach
+## 1.2 Approach
 
-We analyse open data from Canton Zurich to investigate a triangular relationship between income, burglaries, and traffic accidents at the municipal level. By joining multiple datasets, we examine whether income predicts crime and accident rates independently, and whether crime and accidents share a connection beyond what income alone explains.
+We analyse open data from Canton Zurich to investigate the relationship between income and burglaries at the municipal level. By joining income statistics, crime records, and geographic boundary data, we examine whether income predicts burglary rates, whether border proximity adds explanatory power, and how these patterns evolve over time.
 
-## Hypotheses
+## 1.3 Hypotheses
 
 **H1 – Income and Burglaries:**
-Municipalities with higher average income exhibit higher burglary rates, as wealthier areas may present more attractive targets.
+Municipalities with higher median income exhibit higher burglary rates, as wealthier areas may present more attractive targets.
 
-**H2 – Income and Accidents:**
-Municipalities with higher average income exhibit lower traffic accident rates, potentially due to better infrastructure, less transit traffic, or newer vehicles.
+**H2 – Border Proximity and Burglaries:**
+Municipalities closer to the national border exhibit higher burglary rates, potentially due to cross-border crime dynamics.
 
-**H3 – Burglaries and Accidents:**
-Burglary rates and traffic accident rates are positively correlated across municipalities, independent of income. Both may reflect underlying factors such as population density or urbanization.
+**H3 – Combined Effect:**
+Income and border proximity jointly predict burglary rates better than either variable alone.
 
-# Data Sources
+# 2 Data Sources
 
-## Income Data
+## 2.1 Income Data
 
 Average taxable income by municipality (Canton Zurich).
 
-## Accident Data
-
-Police-registered traffic accidents (Canton Zurich).
-
-## Burglary Data
+## 2.2 Burglary Data
 
 Burglary statistics by municipality (Canton Zurich).
 
-# Cleaning and Formatting the Dataset
+## 2.3 Geographic Data
 
-## Data Formatting
+Municipality boundaries, city district boundaries, and Swiss national borders (swisstopo).
 
-## Investigating Missing Values
+# 3 Cleaning and Formatting the Dataset
 
-## Joining the Datasets
+## 3.1 Data Formatting
 
-# Exploratory Data Analysis
+## 3.2 Investigating Missing Values
 
-## Income Distribution
+## 3.3 Joining the Datasets
 
-## Accident Rates by Municipality
+# 4 Exploratory Data Analysis
 
-## Burglary Rates by Municipality
+Before testing our hypotheses through formal modelling, we explore the data visually. This section follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
 
-## Correlation Overview
+## 4.1 Temporal Trends: Income and Burglary Rates
 
-# Modelling
+We begin by examining how burglary rates and median income have evolved across Canton Zurich over time. Since the two variables operate on fundamentally different scales, we normalise both to an index where the first available year equals 100. This allows direct comparison of their relative trajectories.
 
-## H1: Income and Burglaries
+```{r indexed-timeline, fig.width=10, fig.height=6}
+timeline_data <- data %>%
+  st_drop_geometry() %>%
+  group_by(Ausgangsjahr) %>%
+  summarise(
+    burglary_rate = mean(Häufigkeitszahl, na.rm = TRUE),
+    income = mean(INCOME_VALUE, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(income))
 
-## H2: Income and Accidents
+base_year <- min(timeline_data$Ausgangsjahr)
+base_vals <- timeline_data %>% filter(Ausgangsjahr == base_year)
 
-## H3: Burglaries and Accidents
+timeline_data <- timeline_data %>%
+  mutate(
+    burglary_index = burglary_rate / base_vals$burglary_rate * 100,
+    income_index = income / base_vals$income * 100
+  )
 
-# Chapter of Choice
+timeline_long <- timeline_data %>%
+  select(Ausgangsjahr, burglary_index, income_index) %>%
+  pivot_longer(cols = c(burglary_index, income_index),
+               names_to = "variable",
+               values_to = "index") %>%
+  mutate(variable = recode(variable,
+                           "burglary_index" = "Burglary Rate",
+                           "income_index" = "Median Income"))
 
-# Conclusions
+ggplot(timeline_long, aes(x = Ausgangsjahr, y = index,
+                          color = variable, linetype = variable)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 100, linetype = "dashed", color = "grey50", linewidth = 0.5) +
+  scale_color_manual(values = c("Burglary Rate" = "#d95f02",
+                                "Median Income" = "#2c7fb8")) +
+  scale_x_continuous(breaks = seq(base_year, max(timeline_data$Ausgangsjahr), 1)) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Burglary Rate and Median Income Over Time",
+    subtitle = paste0("Canton Zurich, indexed (", base_year, " = 100)"),
+    x = "Year",
+    y = "Index",
+    color = NULL,
+    linetype = NULL
+  )
+```
 
-## Key Findings
+The indexed timeline reveals a striking divergence: while median income has risen steadily over the observation period, burglary rates have declined substantially. This inverse macro-trend already raises questions about the assumed positive relationship in H1. If higher income attracted more burglaries, we would expect both lines to move in the same direction — yet they clearly do not. This motivates a closer look at whether the pattern holds at the municipal level, or whether spatial factors such as border proximity might better explain variation in burglary rates.
 
-## Limitations
+## 4.2 Spatial Dimension: Burglary Rates by Border Proximity
 
-# Generative AI Reflection
+The macro-level decline in burglaries may mask important spatial heterogeneity. To investigate whether geography matters, we group municipalities into three categories based on their centroid distance to the Swiss national border and track their burglary rates over time separately.
+
+```{r border-timeline, fig.width=10, fig.height=6}
+border_timeline <- data %>%
+  st_drop_geometry() %>%
+  filter(!is.na(distance_to_border_km), !is.na(Häufigkeitszahl)) %>%
+  mutate(border_group = cut(distance_to_border_km,
+                            breaks = c(0, 10, 20, Inf),
+                            labels = c("< 10 km", "10–20 km", "> 20 km"))) %>%
+  group_by(Ausgangsjahr, border_group) %>%
+  summarise(
+    burglary_rate = mean(Häufigkeitszahl, na.rm = TRUE),
+    n_municipalities = n_distinct(Gemeinde_BFS_Nr),
+    .groups = "drop"
+  )
+
+ggplot(border_timeline, aes(x = Ausgangsjahr, y = burglary_rate,
+                            color = border_group)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = c("< 10 km" = "#e41a1c",
+                                "10–20 km" = "#ff7f00",
+                                "> 20 km" = "#4daf4a")) +
+  scale_x_continuous(breaks = seq(base_year, max(border_timeline$Ausgangsjahr), 1)) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Burglary Rate Over Time by Distance to National Border",
+    subtitle = "Canton Zurich, municipalities grouped by centroid distance to border",
+    x = "Year",
+    y = "Burglary Rate (per 1'000 inhabitants)",
+    color = "Distance to Border"
+  )
+```
+
+This chart reveals a clear spatial gradient: municipalities within 10 km of the national border consistently exhibit higher burglary rates than those further inland. While all three groups follow the general downward trend observed in Section 4.1, the gap between border-proximate and interior municipalities persists across the entire observation period. This suggests that border proximity is a structurally relevant factor — not merely a transient pattern — and provides initial support for H2.
+
+## 4.3 Cross-Sectional Analysis: Income vs. Burglary Rate
+
+Having established the temporal and spatial context, we now examine the core relationship hypothesised in H1: does higher municipal income predict higher burglary rates? We aggregate each municipality across all available years and fit a simple linear regression.
+
+```{r h1-scatterplot, fig.width=10, fig.height=7}
+h1_data <- data %>%
+  st_drop_geometry() %>%
+  group_by(Gemeinde_BFS_Nr, Gemeindename) %>%
+  summarise(
+    income_median = median(INCOME_VALUE, na.rm = TRUE),
+    haeufigkeit_mean = mean(Häufigkeitszahl, na.rm = TRUE),
+    einwohner_mean = mean(Einwohner, na.rm = TRUE),
+    distance_to_border_km = first(distance_to_border_km),
+    n_years = n(),
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(income_median), !is.na(haeufigkeit_mean))
+
+lm_h1 <- lm(haeufigkeit_mean ~ income_median, data = h1_data)
+
+r2 <- summary(lm_h1)$r.squared
+p_val <- summary(lm_h1)$coefficients[2, 4]
+label_text <- paste0("R² = ", round(r2, 3),
+                     "\np = ", formatC(p_val, format = "e", digits = 2))
+
+ggplot(h1_data, aes(x = income_median, y = haeufigkeit_mean)) +
+  geom_point(aes(size = einwohner_mean), alpha = 0.5, color = "#2c7fb8") +
+  geom_smooth(method = "lm", se = TRUE, color = "#d95f02", linewidth = 1) +
+  scale_x_continuous(labels = scales::comma_format(big.mark = "'")) +
+  scale_size_continuous(name = "Population (avg.)", labels = scales::comma) +
+  annotate("text", x = Inf, y = Inf, label = label_text,
+           hjust = 1.1, vjust = 1.5, size = 4, fontface = "italic") +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "H1: Median Income vs. Burglary Rate",
+    subtitle = "Per municipality/city district, aggregated across all years",
+    x = "Median Income (CHF)",
+    y = "Burglary Rate (per 1'000 inhabitants)"
+  )
+```
+
+The scatterplot does not support H1. The regression line slopes slightly *downward*, suggesting that wealthier municipalities tend to have marginally lower — not higher — burglary rates. However, the effect is weak: income explains only about 2% of the variance in burglary rates, and the p-value does not reach conventional significance at the 5% level. A few outliers with very high burglary rates (likely small municipalities where a handful of incidents inflate the rate) are visible in the upper portion of the plot. Given these findings, income alone is a poor predictor of burglary rates. This motivates the inclusion of border proximity as an additional predictor.
+
+## 4.4 Multiple Regression: Adding Border Proximity
+
+Since income alone fails to explain burglary rate variation, we extend the model by adding distance to the national border as a second predictor. This tests whether geographic location provides independent explanatory power beyond income.
+
+```{r multiple-regression, fig.width=10, fig.height=7}
+h1_multi_data <- h1_data %>%
+  filter(!is.na(distance_to_border_km))
+
+lm_multi <- lm(haeufigkeit_mean ~ income_median + distance_to_border_km,
+               data = h1_multi_data)
+
+s <- summary(lm_multi)
+r2_multi <- s$r.squared
+adj_r2 <- s$adj.r.squared
+p_income <- s$coefficients["income_median", 4]
+p_border <- s$coefficients["distance_to_border_km", 4]
+
+ggplot(h1_multi_data, aes(x = distance_to_border_km, y = haeufigkeit_mean)) +
+  geom_point(aes(color = income_median, size = einwohner_mean), alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, color = "#d95f02", linewidth = 1) +
+  scale_color_viridis_c(name = "Median Income\n(CHF)",
+                        labels = scales::comma_format(big.mark = "'")) +
+  scale_size_continuous(name = "Population (avg.)", labels = scales::comma) +
+  annotate("text", x = Inf, y = Inf,
+           label = paste0("Multiple Model:\n",
+                          "R² = ", round(r2_multi, 3),
+                          " (adj. ", round(adj_r2, 3), ")\n",
+                          "p(Income) = ", formatC(p_income, format = "e", digits = 2), "\n",
+                          "p(Border dist.) = ", formatC(p_border, format = "e", digits = 2)),
+           hjust = 1.1, vjust = 1.3, size = 3.5, fontface = "italic") +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Burglary Rate vs. Distance to National Border",
+    subtitle = "Color = Median Income | Multiple Regression: Rate ~ Income + Border Distance",
+    x = "Distance to National Border (km)",
+    y = "Burglary Rate (per 1'000 inhabitants)"
+  )
+```
+
+The multiple regression plot visualises the relationship between border distance and burglary rates, with income encoded as point colour. The downward-sloping regression line confirms the pattern observed in Section 4.2: municipalities closer to the border tend to have higher burglary rates. The annotation shows the p-values for both predictors separately, allowing a direct comparison of their relative importance. If border distance achieves significance while income does not, this would suggest that geographic factors outweigh socioeconomic ones in explaining burglary rate variation across Canton Zurich.
+
+## 4.5 Municipality Typology: Income–Crime Clusters
+
+Finally, we classify all municipalities into four quadrants based on whether their median income and average burglary rate fall above or below the canton-wide median. This typology provides an intuitive summary of the landscape and highlights which municipalities defy the expected patterns.
+
+```{r cluster-plot, fig.width=10, fig.height=7}
+cluster_data <- data %>%
+  st_drop_geometry() %>%
+  group_by(Gemeinde_BFS_Nr, Gemeindename) %>%
+  summarise(
+    income_median = median(INCOME_VALUE, na.rm = TRUE),
+    haeufigkeit_mean = mean(Häufigkeitszahl, na.rm = TRUE),
+    einwohner_mean = mean(Einwohner, na.rm = TRUE),
+    distance_to_border_km = first(distance_to_border_km),
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(income_median), !is.na(haeufigkeit_mean))
+
+income_threshold <- median(cluster_data$income_median)
+crime_threshold <- median(cluster_data$haeufigkeit_mean)
+
+cluster_data <- cluster_data %>%
+  mutate(cluster = case_when(
+    income_median >= income_threshold & haeufigkeit_mean >= crime_threshold
+      ~ "High Income / High Crime",
+    income_median >= income_threshold & haeufigkeit_mean < crime_threshold
+      ~ "High Income / Low Crime",
+    income_median < income_threshold & haeufigkeit_mean >= crime_threshold
+      ~ "Low Income / High Crime",
+    income_median < income_threshold & haeufigkeit_mean < crime_threshold
+      ~ "Low Income / Low Crime"
+  ))
+
+ggplot(cluster_data, aes(x = income_median, y = haeufigkeit_mean,
+                         color = cluster)) +
+  geom_point(aes(size = einwohner_mean), alpha = 0.6) +
+  geom_vline(xintercept = income_threshold, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = crime_threshold, linetype = "dashed", color = "grey40") +
+  geom_text(data = cluster_data %>%
+              filter(haeufigkeit_mean > quantile(haeufigkeit_mean, 0.95) |
+                     einwohner_mean > quantile(einwohner_mean, 0.95)),
+            aes(label = Gemeindename),
+            size = 3, nudge_y = 0.5, show.legend = FALSE) +
+  scale_color_manual(values = c(
+    "High Income / High Crime" = "#e41a1c",
+    "High Income / Low Crime"  = "#4daf4a",
+    "Low Income / High Crime"  = "#ff7f00",
+    "Low Income / Low Crime"   = "#377eb8"
+  )) +
+  scale_size_continuous(name = "Population (avg.)", labels = scales::comma) +
+  scale_x_continuous(labels = scales::comma_format(big.mark = "'")) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Municipality Clusters: Income vs. Burglary Rate",
+    subtitle = "Dashed lines = median thresholds across all municipalities",
+    x = "Median Income (CHF)",
+    y = "Burglary Rate (per 1'000 inhabitants)",
+    color = "Cluster"
+  )
+```
+
+The quadrant plot reveals that municipalities are distributed relatively evenly across all four clusters, with no strong concentration in the "High Income / High Crime" quadrant that H1 would predict. The labelled outliers — municipalities with exceptionally high burglary rates or large populations — provide concrete cases for further investigation. Notably, the distribution of municipalities across clusters supports the earlier regression findings: income alone does not systematically sort municipalities into high- or low-crime categories. Other factors, particularly geographic location, appear to play a more decisive role.
+
+# 5 Modelling
+
+## 5.1 H1: Income and Burglaries
+
+## 5.2 H2: Border Proximity and Burglaries
+
+## 5.3 H3: Combined Effect
+
+# 6 Chapter of Choice
+
+# 7 Conclusions
+
+## 7.1 Key Findings
+
+## 7.2 Limitations
+
+# 8 Generative AI Reflection
