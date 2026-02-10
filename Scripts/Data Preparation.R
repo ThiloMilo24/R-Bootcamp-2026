@@ -30,7 +30,7 @@ ebd <- ebd %>%
          Stadtkreis_Name != "unbekannt") %>% 
   select(-c(Gesetz_Nummer, Gesetz_Abk))
 
-# Income data municipality level
+# Income data on municipality level
 income_kt <- read.csv("Data/KTZH_Income_median.csv")
 
 # Remove non-municipality and city data and unused columns
