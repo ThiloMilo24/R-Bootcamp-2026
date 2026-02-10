@@ -3,14 +3,14 @@ title: "Income, Crime, and Accidents in Canton Zurich"
 author: "Thilo Holstein, Hans Josef Thalathara"
 date: "2026-01-26"
 output:
-  pdf_document:
-    toc: true
-    toc_depth: '3'
   html_document:
     toc: true
     toc_depth: 3
     number_sections: true
     theme: default
+  pdf_document:
+    toc: true
+    toc_depth: '3'
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)

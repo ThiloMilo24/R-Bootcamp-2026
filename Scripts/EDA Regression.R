@@ -87,3 +87,5 @@ ggplot(h1_multi_data, aes(x = distance_to_border_km, y = haeufigkeit_mean)) +
     x = "Distance to National Border (km)",
     y = "Burglary Rate (per 1'000 inhabitants)"
   )
+
+getwd()
