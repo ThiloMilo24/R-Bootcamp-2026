@@ -21,6 +21,7 @@ library(ggplot2)
 library(tidyr)
 library(MASS)
 library(scales)
+library(gridExtra)
 
 source("Scripts/Data Preparation.R")
 ```
@@ -72,7 +73,141 @@ Municipality boundaries, city district boundaries, and Swiss national borders (s
 
 # Exploratory Data Analysis
 
-Before testing our hypotheses through formal modelling, we explore the data visually. This section follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
+Before testing our hypotheses through formal modelling, we explore the data visually. This section begins with a descriptive overview of the dataset, then follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
+
+## Descriptive Overview
+
+We begin with a summary of the dataset's structure and the distributions of our key variables. This provides the necessary context for all subsequent analyses.
+
+```{r descriptive-overview, results='asis'}
+desc_data <- data %>% st_drop_geometry()
+
+n_obs <- nrow(desc_data)
+n_municipalities <- n_distinct(desc_data$Gemeinde_BFS_Nr)
+year_range <- range(desc_data$Ausgangsjahr)
+n_years <- n_distinct(desc_data$Ausgangsjahr)
+
+cat(paste0(
+  "The dataset contains **", format(n_obs, big.mark = "'"), " observations** across **",
+  n_municipalities, " municipalities and city districts** over **",
+  n_years, " years** (", year_range[1], "–", year_range[2], "). ",
+  "Each observation represents one municipality in one year, recording the number of burglaries, ",
+  "population size, burglary rate, median income, and distance to the national border.\n"
+))
+```
+
+```{r summary-table, results='asis'}
+summary_stats <- desc_data %>%
+  summarise(
+    across(
+      c(Straftaten_total, Einwohner, Häufigkeitszahl, INCOME_VALUE, distance_to_border_km),
+      list(
+        mean = ~mean(.x, na.rm = TRUE),
+        median = ~median(.x, na.rm = TRUE),
+        sd = ~sd(.x, na.rm = TRUE),
+        min = ~min(.x, na.rm = TRUE),
+        max = ~max(.x, na.rm = TRUE),
+        missing = ~sum(is.na(.x))
+      ),
+      .names = "{.col}__{.fn}"
+    )
+  ) %>%
+  pivot_longer(everything(),
+               names_to = c("variable", "stat"),
+               names_sep = "__") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  mutate(variable = recode(variable,
+    "Straftaten_total" = "Burglary Count",
+    "Einwohner" = "Population",
+    "Häufigkeitszahl" = "Burglary Rate (per 1k)",
+    "INCOME_VALUE" = "Median Income (CHF)",
+    "distance_to_border_km" = "Border Distance (km)"
+  ))
+
+knitr::kable(
+  summary_stats %>%
+    mutate(across(where(is.numeric), ~round(.x, 1))) %>%
+    rename(Variable = variable, Mean = mean, Median = median,
+           SD = sd, Min = min, Max = max, Missing = missing),
+  row.names = FALSE,
+  caption = "Summary statistics for key variables"
+)
+```
+
+The distributions of our key variables reveal important characteristics of the data:
+
+```{r dist-burglary, fig.width=10, fig.height=4}
+ggplot(desc_data, aes(x = Straftaten_total)) +
+  geom_histogram(bins = 50, fill = "#2c7fb8", alpha = 0.7, color = "white") +
+  scale_x_continuous(labels = comma) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Distribution of Burglary Counts",
+    subtitle = "Per municipality-year observation",
+    x = "Number of Burglaries",
+    y = "Frequency"
+  )
+```
+
+The burglary count distribution is heavily right-skewed: most municipality-year observations record relatively few burglaries, while a small number of large municipalities account for the extreme values. This skew is a hallmark of count data and one reason why standard linear regression is inappropriate here — a point we return to in the modelling section.
+
+```{r dist-income-border, fig.width=10, fig.height=4}
+p_income <- ggplot(desc_data %>% filter(!is.na(INCOME_VALUE)),
+                   aes(x = INCOME_VALUE)) +
+  geom_histogram(bins = 40, fill = "#2c7fb8", alpha = 0.7, color = "white") +
+  scale_x_continuous(labels = comma_format(big.mark = "'")) +
+  theme_minimal(base_size = 12) +
+  labs(title = "Median Income", x = "CHF", y = "Frequency")
+
+p_border <- ggplot(desc_data %>% filter(!is.na(distance_to_border_km)),
+                   aes(x = distance_to_border_km)) +
+  geom_histogram(bins = 30, fill = "#d95f02", alpha = 0.7, color = "white") +
+  theme_minimal(base_size = 12) +
+  labs(title = "Distance to Border", x = "km", y = "Frequency")
+
+p_pop <- ggplot(desc_data, aes(x = Einwohner)) +
+  geom_histogram(bins = 50, fill = "#4daf4a", alpha = 0.7, color = "white") +
+  scale_x_log10(labels = comma) +
+  theme_minimal(base_size = 12) +
+  labs(title = "Population (log scale)", x = "Inhabitants", y = "Frequency")
+
+gridExtra::grid.arrange(p_income, p_border, p_pop, ncol = 3)
+```
+
+Income is approximately normally distributed across municipalities, with most values clustered between 30,000 and 50,000 CHF. Border distance shows a right-skewed distribution — most municipalities lie within 20–30 km of the border, with few exceeding 40 km. Population varies enormously (note the log scale): from small rural communes with fewer than 2,000 residents to Zurich city districts with over 50,000.
+
+```{r correlation-matrix, fig.width=7, fig.height=6}
+cor_data <- desc_data %>%
+  select(Straftaten_total, Einwohner, Häufigkeitszahl,
+         INCOME_VALUE, distance_to_border_km) %>%
+  filter(complete.cases(.))
+
+cor_matrix <- cor(cor_data)
+
+# Rename for display
+colnames(cor_matrix) <- rownames(cor_matrix) <- c(
+  "Burglary\nCount", "Population", "Burglary\nRate",
+  "Income", "Border\nDist."
+)
+
+# Heatmap
+cor_long <- as.data.frame(as.table(cor_matrix)) %>%
+  rename(Var1 = Var1, Var2 = Var2, Correlation = Freq)
+
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Correlation, 2)), size = 4) +
+  scale_fill_gradient2(low = "#d95f02", mid = "white", high = "#2c7fb8",
+                       midpoint = 0, limits = c(-1, 1)) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Correlation Matrix of Key Variables",
+    x = NULL, y = NULL
+  )
+```
+
+The correlation matrix provides a first hint at the relationships we will explore in detail. Raw burglary counts correlate strongly with population — unsurprisingly, since larger municipalities have more of everything. This is precisely why we use the burglary *rate* (or count models with a population offset) rather than raw counts in our analysis. The correlations between burglary rate, income, and border distance are the ones relevant to our hypotheses and will be examined in the following sections.
 
 ## Temporal Trends: Income and Burglary Rates
 
