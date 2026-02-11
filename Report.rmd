@@ -19,60 +19,197 @@ library(dplyr)
 library(sf)
 library(ggplot2)
 library(tidyr)
+library(MASS)
+library(scales)
+library(gridExtra)
 
 source("Scripts/Data Preparation.R")
 ```
 
-# 1 Introduction
+# Introduction
 
 This project explores how income levels relate to crime (burglaries) across municipalities in Canton Zurich, and whether geographic proximity to the national border plays an additional role.
 
-## 1.1 Research Question
+## Research Question
 
 How does income level relate to burglary rates across municipalities in Canton Zurich, and does proximity to the national border act as an independent predictor of crime?
 
-## 1.2 Approach
+## Approach
 
 We analyse open data from Canton Zurich to investigate the relationship between income and burglaries at the municipal level. By joining income statistics, crime records, and geographic boundary data, we examine whether income predicts burglary rates, whether border proximity adds explanatory power, and how these patterns evolve over time.
 
-## 1.3 Hypotheses
+## Hypotheses
 
-**H1 – Income and Burglaries:**
+**H1 -- Income and Burglaries:**
 Municipalities with higher median income exhibit higher burglary rates, as wealthier areas may present more attractive targets.
 
-**H2 – Border Proximity and Burglaries:**
+**H2 -- Border Proximity and Burglaries:**
 Municipalities closer to the national border exhibit higher burglary rates, potentially due to cross-border crime dynamics.
 
-**H3 – Combined Effect:**
+**H3 -- Combined Effect:**
 Income and border proximity jointly predict burglary rates better than either variable alone.
 
-# 2 Data Sources
+# Data Sources
 
-## 2.1 Income Data
+## Income Data
 
 Average taxable income by municipality (Canton Zurich).
 
-## 2.2 Burglary Data
+## Burglary Data
 
 Burglary statistics by municipality (Canton Zurich).
 
-## 2.3 Geographic Data
+## Geographic Data
 
 Municipality boundaries, city district boundaries, and Swiss national borders (swisstopo).
 
-# 3 Cleaning and Formatting the Dataset
+# Cleaning and Formatting the Dataset
 
-## 3.1 Data Formatting
+## Data Formatting
 
-## 3.2 Investigating Missing Values
+## Investigating Missing Values
 
-## 3.3 Joining the Datasets
+## Joining the Datasets
 
-# 4 Exploratory Data Analysis
+# Exploratory Data Analysis
 
-Before testing our hypotheses through formal modelling, we explore the data visually. This section follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
+Before testing our hypotheses through formal modelling, we explore the data visually. This section begins with a descriptive overview of the dataset, then follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
 
-## 4.1 Temporal Trends: Income and Burglary Rates
+## Descriptive Overview
+
+We begin with a summary of the dataset's structure and the distributions of our key variables. This provides the necessary context for all subsequent analyses.
+
+```{r descriptive-overview, results='asis'}
+desc_data <- data %>% st_drop_geometry()
+
+n_obs <- nrow(desc_data)
+n_municipalities <- n_distinct(desc_data$Gemeinde_BFS_Nr)
+year_range <- range(desc_data$Ausgangsjahr)
+n_years <- n_distinct(desc_data$Ausgangsjahr)
+
+cat(paste0(
+  "The dataset contains **", format(n_obs, big.mark = "'"), " observations** across **",
+  n_municipalities, " municipalities and city districts** over **",
+  n_years, " years** (", year_range[1], "–", year_range[2], "). ",
+  "Each observation represents one municipality in one year, recording the number of burglaries, ",
+  "population size, burglary rate, median income, and distance to the national border.\n"
+))
+```
+
+```{r summary-table, results='asis'}
+summary_stats <- desc_data %>%
+  summarise(
+    across(
+      c(Straftaten_total, Einwohner, Häufigkeitszahl, INCOME_VALUE, distance_to_border_km),
+      list(
+        mean = ~mean(.x, na.rm = TRUE),
+        median = ~median(.x, na.rm = TRUE),
+        sd = ~sd(.x, na.rm = TRUE),
+        min = ~min(.x, na.rm = TRUE),
+        max = ~max(.x, na.rm = TRUE),
+        missing = ~sum(is.na(.x))
+      ),
+      .names = "{.col}__{.fn}"
+    )
+  ) %>%
+  pivot_longer(everything(),
+               names_to = c("variable", "stat"),
+               names_sep = "__") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  mutate(variable = recode(variable,
+    "Straftaten_total" = "Burglary Count",
+    "Einwohner" = "Population",
+    "Häufigkeitszahl" = "Burglary Rate (per 1k)",
+    "INCOME_VALUE" = "Median Income (CHF)",
+    "distance_to_border_km" = "Border Distance (km)"
+  ))
+
+knitr::kable(
+  summary_stats %>%
+    mutate(across(where(is.numeric), ~round(.x, 1))) %>%
+    rename(Variable = variable, Mean = mean, Median = median,
+           SD = sd, Min = min, Max = max, Missing = missing),
+  row.names = FALSE,
+  caption = "Summary statistics for key variables"
+)
+```
+
+The distributions of our key variables reveal important characteristics of the data:
+
+```{r dist-burglary, fig.width=10, fig.height=4}
+ggplot(desc_data, aes(x = Straftaten_total)) +
+  geom_histogram(bins = 50, fill = "#2c7fb8", alpha = 0.7, color = "white") +
+  scale_x_continuous(labels = comma) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Distribution of Burglary Counts",
+    subtitle = "Per municipality-year observation",
+    x = "Number of Burglaries",
+    y = "Frequency"
+  )
+```
+
+The burglary count distribution is heavily right-skewed: most municipality-year observations record relatively few burglaries, while a small number of large municipalities account for the extreme values. This skew is a hallmark of count data and one reason why standard linear regression is inappropriate here — a point we return to in the modelling section.
+
+```{r dist-income-border, fig.width=10, fig.height=4}
+p_income <- ggplot(desc_data %>% filter(!is.na(INCOME_VALUE)),
+                   aes(x = INCOME_VALUE)) +
+  geom_histogram(bins = 40, fill = "#2c7fb8", alpha = 0.7, color = "white") +
+  scale_x_continuous(labels = comma_format(big.mark = "'")) +
+  theme_minimal(base_size = 12) +
+  labs(title = "Median Income", x = "CHF", y = "Frequency")
+
+p_border <- ggplot(desc_data %>% filter(!is.na(distance_to_border_km)),
+                   aes(x = distance_to_border_km)) +
+  geom_histogram(bins = 30, fill = "#d95f02", alpha = 0.7, color = "white") +
+  theme_minimal(base_size = 12) +
+  labs(title = "Distance to Border", x = "km", y = "Frequency")
+
+p_pop <- ggplot(desc_data, aes(x = Einwohner)) +
+  geom_histogram(bins = 50, fill = "#4daf4a", alpha = 0.7, color = "white") +
+  scale_x_log10(labels = comma) +
+  theme_minimal(base_size = 12) +
+  labs(title = "Population (log scale)", x = "Inhabitants", y = "Frequency")
+
+gridExtra::grid.arrange(p_income, p_border, p_pop, ncol = 3)
+```
+
+Income is approximately normally distributed across municipalities, with most values clustered between 30,000 and 50,000 CHF. Border distance shows a right-skewed distribution — most municipalities lie within 20–30 km of the border, with few exceeding 40 km. Population varies enormously (note the log scale): from small rural communes with fewer than 2,000 residents to Zurich city districts with over 50,000.
+
+```{r correlation-matrix, fig.width=7, fig.height=6}
+cor_data <- desc_data %>%
+  select(Straftaten_total, Einwohner, Häufigkeitszahl,
+         INCOME_VALUE, distance_to_border_km) %>%
+  filter(complete.cases(.))
+
+cor_matrix <- cor(cor_data)
+
+# Rename for display
+colnames(cor_matrix) <- rownames(cor_matrix) <- c(
+  "Burglary\nCount", "Population", "Burglary\nRate",
+  "Income", "Border\nDist."
+)
+
+# Heatmap
+cor_long <- as.data.frame(as.table(cor_matrix)) %>%
+  rename(Var1 = Var1, Var2 = Var2, Correlation = Freq)
+
+ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Correlation, 2)), size = 4) +
+  scale_fill_gradient2(low = "#d95f02", mid = "white", high = "#2c7fb8",
+                       midpoint = 0, limits = c(-1, 1)) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Correlation Matrix of Key Variables",
+    x = NULL, y = NULL
+  )
+```
+
+The correlation matrix provides a first hint at the relationships we will explore in detail. Raw burglary counts correlate strongly with population — unsurprisingly, since larger municipalities have more of everything. This is precisely why we use the burglary *rate* (or count models with a population offset) rather than raw counts in our analysis. The correlations between burglary rate, income, and border distance are the ones relevant to our hypotheses and will be examined in the following sections.
+
+## Temporal Trends: Income and Burglary Rates
 
 We begin by examining how burglary rates and median income have evolved across Canton Zurich over time. Since the two variables operate on fundamentally different scales, we normalise both to an index where the first available year equals 100. This allows direct comparison of their relative trajectories.
 
@@ -127,7 +264,7 @@ ggplot(timeline_long, aes(x = Ausgangsjahr, y = index,
 
 The indexed timeline reveals a striking divergence: while median income has risen steadily over the observation period, burglary rates have declined substantially. This inverse macro-trend already raises questions about the assumed positive relationship in H1. If higher income attracted more burglaries, we would expect both lines to move in the same direction — yet they clearly do not. This motivates a closer look at whether the pattern holds at the municipal level, or whether spatial factors such as border proximity might better explain variation in burglary rates.
 
-## 4.2 Spatial Dimension: Burglary Rates by Border Proximity
+## Spatial Dimension: Burglary Rates by Border Proximity
 
 The macro-level decline in burglaries may mask important spatial heterogeneity. To investigate whether geography matters, we group municipalities into three categories based on their centroid distance to the Swiss national border and track their burglary rates over time separately.
 
@@ -166,7 +303,7 @@ ggplot(border_timeline, aes(x = Ausgangsjahr, y = burglary_rate,
 
 This chart reveals a clear spatial gradient: municipalities within 10 km of the national border consistently exhibit higher burglary rates than those further inland. While all three groups follow the general downward trend observed in Section 4.1, the gap between border-proximate and interior municipalities persists across the entire observation period. This suggests that border proximity is a structurally relevant factor — not merely a transient pattern — and provides initial support for H2.
 
-## 4.3 Cross-Sectional Analysis: Income vs. Burglary Rate
+## Cross-Sectional Analysis: Income vs. Burglary Rate
 
 Having established the temporal and spatial context, we now examine the core relationship hypothesised in H1: does higher municipal income predict higher burglary rates? We aggregate each municipality across all available years and fit a simple linear regression.
 
@@ -194,8 +331,8 @@ label_text <- paste0("R² = ", round(r2, 3),
 ggplot(h1_data, aes(x = income_median, y = haeufigkeit_mean)) +
   geom_point(aes(size = einwohner_mean), alpha = 0.5, color = "#2c7fb8") +
   geom_smooth(method = "lm", se = TRUE, color = "#d95f02", linewidth = 1) +
-  scale_x_continuous(labels = scales::comma_format(big.mark = "'")) +
-  scale_size_continuous(name = "Population (avg.)", labels = scales::comma) +
+  scale_x_continuous(labels = comma_format(big.mark = "'")) +
+  scale_size_continuous(name = "Population (avg.)", labels = comma) +
   annotate("text", x = Inf, y = Inf, label = label_text,
            hjust = 1.1, vjust = 1.5, size = 4, fontface = "italic") +
   theme_minimal(base_size = 13) +
@@ -209,50 +346,9 @@ ggplot(h1_data, aes(x = income_median, y = haeufigkeit_mean)) +
 
 The scatterplot does not support H1. The regression line slopes slightly *downward*, suggesting that wealthier municipalities tend to have marginally lower — not higher — burglary rates. However, the effect is weak: income explains only about 2% of the variance in burglary rates, and the p-value does not reach conventional significance at the 5% level. A few outliers with very high burglary rates (likely small municipalities where a handful of incidents inflate the rate) are visible in the upper portion of the plot. Given these findings, income alone is a poor predictor of burglary rates. This motivates the inclusion of border proximity as an additional predictor.
 
-## 4.4 Multiple Regression: Adding Border Proximity
+## Municipality Typology: Income--Crime Clusters
 
-Since income alone fails to explain burglary rate variation, we extend the model by adding distance to the national border as a second predictor. This tests whether geographic location provides independent explanatory power beyond income.
-
-```{r multiple-regression, fig.width=10, fig.height=7}
-h1_multi_data <- h1_data %>%
-  filter(!is.na(distance_to_border_km))
-
-lm_multi <- lm(haeufigkeit_mean ~ income_median + distance_to_border_km,
-               data = h1_multi_data)
-
-s <- summary(lm_multi)
-r2_multi <- s$r.squared
-adj_r2 <- s$adj.r.squared
-p_income <- s$coefficients["income_median", 4]
-p_border <- s$coefficients["distance_to_border_km", 4]
-
-ggplot(h1_multi_data, aes(x = distance_to_border_km, y = haeufigkeit_mean)) +
-  geom_point(aes(color = income_median, size = einwohner_mean), alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE, color = "#d95f02", linewidth = 1) +
-  scale_color_viridis_c(name = "Median Income\n(CHF)",
-                        labels = scales::comma_format(big.mark = "'")) +
-  scale_size_continuous(name = "Population (avg.)", labels = scales::comma) +
-  annotate("text", x = Inf, y = Inf,
-           label = paste0("Multiple Model:\n",
-                          "R² = ", round(r2_multi, 3),
-                          " (adj. ", round(adj_r2, 3), ")\n",
-                          "p(Income) = ", formatC(p_income, format = "e", digits = 2), "\n",
-                          "p(Border dist.) = ", formatC(p_border, format = "e", digits = 2)),
-           hjust = 1.1, vjust = 1.3, size = 3.5, fontface = "italic") +
-  theme_minimal(base_size = 13) +
-  labs(
-    title = "Burglary Rate vs. Distance to National Border",
-    subtitle = "Color = Median Income | Multiple Regression: Rate ~ Income + Border Distance",
-    x = "Distance to National Border (km)",
-    y = "Burglary Rate (per 1'000 inhabitants)"
-  )
-```
-
-The multiple regression plot visualises the relationship between border distance and burglary rates, with income encoded as point colour. The downward-sloping regression line confirms the pattern observed in Section 4.2: municipalities closer to the border tend to have higher burglary rates. The annotation shows the p-values for both predictors separately, allowing a direct comparison of their relative importance. If border distance achieves significance while income does not, this would suggest that geographic factors outweigh socioeconomic ones in explaining burglary rate variation across Canton Zurich.
-
-## 4.5 Municipality Typology: Income–Crime Clusters
-
-Finally, we classify all municipalities into four quadrants based on whether their median income and average burglary rate fall above or below the canton-wide median. This typology provides an intuitive summary of the landscape and highlights which municipalities defy the expected patterns.
+We classify all municipalities into four quadrants based on whether their median income and average burglary rate fall above or below the canton-wide median. This typology provides an intuitive summary of the landscape and highlights which municipalities defy the expected patterns.
 
 ```{r cluster-plot, fig.width=10, fig.height=7}
 cluster_data <- data %>%
@@ -298,8 +394,8 @@ ggplot(cluster_data, aes(x = income_median, y = haeufigkeit_mean,
     "Low Income / High Crime"  = "#ff7f00",
     "Low Income / Low Crime"   = "#377eb8"
   )) +
-  scale_size_continuous(name = "Population (avg.)", labels = scales::comma) +
-  scale_x_continuous(labels = scales::comma_format(big.mark = "'")) +
+  scale_size_continuous(name = "Population (avg.)", labels = comma) +
+  scale_x_continuous(labels = comma_format(big.mark = "'")) +
   theme_minimal(base_size = 13) +
   labs(
     title = "Municipality Clusters: Income vs. Burglary Rate",
@@ -312,20 +408,412 @@ ggplot(cluster_data, aes(x = income_median, y = haeufigkeit_mean,
 
 The quadrant plot reveals that municipalities are distributed relatively evenly across all four clusters, with no strong concentration in the "High Income / High Crime" quadrant that H1 would predict. The labelled outliers — municipalities with exceptionally high burglary rates or large populations — provide concrete cases for further investigation. Notably, the distribution of municipalities across clusters supports the earlier regression findings: income alone does not systematically sort municipalities into high- or low-crime categories. Other factors, particularly geographic location, appear to play a more decisive role.
 
-# 5 Modelling
+# Modelling
 
-## 5.1 H1: Income and Burglaries
+The EDA suggests that border proximity matters more than income for explaining burglary variation. To formally test this, we move beyond simple linear regression (which treats burglary *rates* as continuous) and instead model the raw **burglary counts** directly. This is more appropriate because:
 
-## 5.2 H2: Border Proximity and Burglaries
+- Burglary counts are non-negative integers — classic **count data**.
+- Municipalities differ vastly in population size, so we need to account for this.
+- The variance in crime counts often exceeds the mean (**overdispersion**), which standard linear models cannot handle.
 
-## 5.3 H3: Combined Effect
+We fit two types of count regression models — **Poisson** and **Negative Binomial** — and compare their performance.
 
-# 6 Chapter of Choice
+## Why Count Regression?
 
-# 7 Conclusions
+A standard linear regression on rates (Häufigkeitszahl) treats every municipality equally, regardless of whether it has 2,000 or 50,000 residents. A municipality with 2 burglaries and 1,000 residents gets the same weight as one with 200 burglaries and 100,000 residents — even though the latter estimate is far more precise. Count regression models solve this by working with the raw counts and using a so-called **offset variable** to account for population size.
 
-## 7.1 Key Findings
+### The Offset Variable
 
-## 7.2 Limitations
+The key idea: we model `Straftaten_total` (raw burglary count) as the outcome, but include `log(Einwohner)` as an **offset**. Mathematically:
 
-# 8 Generative AI Reflection
+$$\log(\text{count}) = \beta_0 + \beta_1 \cdot \text{income} + \beta_2 \cdot \text{border distance} + \log(\text{population})$$
+
+Rearranging:
+
+$$\log\left(\frac{\text{count}}{\text{population}}\right) = \beta_0 + \beta_1 \cdot \text{income} + \beta_2 \cdot \text{border distance}$$
+
+So the model effectively predicts the **rate** (burglaries per capita), but it correctly weights each observation by its population size. The offset is not estimated — it enters the model with a fixed coefficient of 1.
+
+### Covariates
+
+We include three covariates (predictor variables):
+
+- **Income** (in 10,000 CHF): Tests whether wealthier municipalities experience more burglaries (H1).
+- **Distance to border** (km): Tests whether proximity to the Swiss national border increases burglaries (H2).
+- **Year** (centered): Controls for the canton-wide declining trend in burglaries over time.
+
+```{r model-data-prep}
+model_data <- data %>%
+  st_drop_geometry() %>%
+  filter(
+    !is.na(Straftaten_total),
+    !is.na(INCOME_VALUE),
+    !is.na(distance_to_border_km),
+    Einwohner > 0
+  ) %>%
+  mutate(
+    log_pop = log(Einwohner),
+    income_10k = INCOME_VALUE / 10000,
+    year_centered = Ausgangsjahr - min(Ausgangsjahr)
+  )
+```
+
+## Poisson Regression
+
+The Poisson model is the natural starting point for count data. It assumes that the outcome follows a Poisson distribution, where the mean equals the variance (**equidispersion**).
+
+```{r poisson-models}
+poisson_m1 <- glm(
+  Straftaten_total ~ income_10k + offset(log_pop),
+  family = poisson(link = "log"),
+  data = model_data
+)
+
+poisson_m2 <- glm(
+  Straftaten_total ~ distance_to_border_km + offset(log_pop),
+  family = poisson(link = "log"),
+  data = model_data
+)
+
+poisson_full <- glm(
+  Straftaten_total ~ income_10k + distance_to_border_km + year_centered +
+    offset(log_pop),
+  family = poisson(link = "log"),
+  data = model_data
+)
+```
+
+```{r poisson-results, results='asis'}
+s_pois <- summary(poisson_full)
+pois_coefs <- s_pois$coefficients
+
+cat("**Poisson Full Model: Burglary Count ~ Income + Border Distance + Year + offset(log Population)**\n\n")
+
+pois_table <- data.frame(
+  Variable = c("(Intercept)", "Income (10k CHF)", "Distance to Border (km)", "Year"),
+  Estimate = round(pois_coefs[, "Estimate"], 4),
+  `Std. Error` = round(pois_coefs[, "Std. Error"], 4),
+  `p-value` = formatC(pois_coefs[, "Pr(>|z|)"], format = "e", digits = 2),
+  check.names = FALSE
+)
+knitr::kable(pois_table, row.names = FALSE)
+```
+
+### Checking for Overdispersion
+
+The critical Poisson assumption is that the variance equals the mean. We check this with the **dispersion statistic**: the sum of squared Pearson residuals divided by the degrees of freedom. A value near 1 indicates the assumption holds; values much greater than 1 signal **overdispersion**.
+
+```{r overdispersion-check, results='asis'}
+pearson_resid <- residuals(poisson_full, type = "pearson")
+dispersion <- sum(pearson_resid^2) / poisson_full$df.residual
+
+cat(paste0("**Dispersion statistic: ", round(dispersion, 2), "**\n\n"))
+
+if (dispersion > 2) {
+  cat("The dispersion statistic is substantially greater than 1, confirming that the data are **overdispersed**. ")
+  cat("This means the Poisson model underestimates the true variability in burglary counts. ")
+  cat("Consequently, the standard errors are too small, and the p-values are artificially low — ")
+  cat("the model appears more confident in its estimates than it should be. ")
+  cat("This motivates fitting a Negative Binomial model, which explicitly accounts for overdispersion.\n")
+} else {
+  cat("The dispersion statistic is close to 1, suggesting that the Poisson assumption is reasonable.\n")
+}
+```
+
+## Negative Binomial Regression
+
+The Negative Binomial (NB) model extends the Poisson by adding an extra parameter **theta** ($\theta$) that captures the overdispersion. When $\theta \to \infty$, the NB reduces to the Poisson. When $\theta$ is small, there is substantial extra variability beyond what the Poisson allows.
+
+This extra variability reflects real-world factors not captured by our covariates: differences in local policing, urban vs. rural character, socioeconomic conditions, and other unobserved heterogeneity between municipalities.
+
+```{r nb-models}
+nb_m1 <- glm.nb(
+  Straftaten_total ~ income_10k + offset(log_pop),
+  data = model_data
+)
+
+nb_m2 <- glm.nb(
+  Straftaten_total ~ distance_to_border_km + offset(log_pop),
+  data = model_data
+)
+
+nb_m3 <- glm.nb(
+  Straftaten_total ~ income_10k + distance_to_border_km + offset(log_pop),
+  data = model_data
+)
+
+nb_full <- glm.nb(
+  Straftaten_total ~ income_10k + distance_to_border_km + year_centered +
+    offset(log_pop),
+  data = model_data
+)
+
+nb_interaction <- glm.nb(
+  Straftaten_total ~ income_10k * distance_to_border_km + year_centered +
+    offset(log_pop),
+  data = model_data
+)
+```
+
+### NB Model Results
+
+```{r nb-results, results='asis'}
+s_nb <- summary(nb_full)
+nb_coefs <- s_nb$coefficients
+
+cat("**NB Full Model: Burglary Count ~ Income + Border Distance + Year + offset(log Population)**\n\n")
+
+nb_table <- data.frame(
+  Variable = c("(Intercept)", "Income (10k CHF)", "Distance to Border (km)", "Year"),
+  Estimate = round(nb_coefs[, "Estimate"], 4),
+  `Std. Error` = round(nb_coefs[, "Std. Error"], 4),
+  `p-value` = formatC(nb_coefs[, "Pr(>|z|)"], format = "e", digits = 2),
+  check.names = FALSE
+)
+knitr::kable(nb_table, row.names = FALSE)
+
+cat(paste0("\n\n**Theta (overdispersion parameter): ", round(nb_full$theta, 3), "**\n\n"))
+```
+
+### Incidence Rate Ratios
+
+The exponentiated coefficients give **Incidence Rate Ratios (IRR)**. An IRR of 0.95 for border distance means: each additional kilometre away from the border *multiplies* the expected burglary rate by 0.95 — i.e., a 5% decrease per kilometre.
+
+```{r irr-table, results='asis'}
+irr <- exp(coef(nb_full))
+irr_ci <- exp(confint(nb_full))
+irr_table <- data.frame(
+  Variable = c("(Intercept)", "Income (10k CHF)", "Distance to Border (km)", "Year"),
+  IRR = round(irr, 4),
+  `CI lower (2.5%)` = round(irr_ci[, 1], 4),
+  `CI upper (97.5%)` = round(irr_ci[, 2], 4),
+  check.names = FALSE
+)
+knitr::kable(irr_table, row.names = FALSE)
+```
+
+### Interaction Model: Does Income Matter More Near the Border?
+
+To test H3, we add an interaction term between income and border distance. If the interaction is significant, it would mean that the effect of income on burglaries *depends* on how close a municipality is to the border.
+
+```{r interaction-results, results='asis'}
+s_int <- summary(nb_interaction)
+int_coefs <- s_int$coefficients
+
+int_table <- data.frame(
+  Variable = c("(Intercept)", "Income (10k CHF)", "Distance to Border (km)",
+               "Year", "Income x Border Distance"),
+  Estimate = round(int_coefs[, "Estimate"], 4),
+  `Std. Error` = round(int_coefs[, "Std. Error"], 4),
+  `p-value` = formatC(int_coefs[, "Pr(>|z|)"], format = "e", digits = 2),
+  check.names = FALSE
+)
+knitr::kable(int_table, row.names = FALSE)
+```
+
+## Model Comparison: Poisson vs. Negative Binomial
+
+### Likelihood Ratio Test
+
+Since the Poisson model is nested within the NB (the Poisson is a special case when $\theta \to \infty$), we can use a **likelihood ratio test** to determine whether the extra parameter $\theta$ significantly improves the fit.
+
+```{r lr-test, results='asis'}
+lr_stat <- 2 * (logLik(nb_full) - logLik(poisson_full))
+lr_pval <- pchisq(as.numeric(lr_stat), df = 1, lower.tail = FALSE)
+
+cat(paste0("- **LR statistic:** ", round(as.numeric(lr_stat), 2), "\n"))
+cat(paste0("- **p-value:** ", formatC(lr_pval, format = "e", digits = 3), "\n\n"))
+
+if (lr_pval < 0.05) {
+  cat("The test is highly significant: the NB model fits substantially better than the Poisson. ")
+  cat("This confirms that overdispersion is present and must be accounted for.\n")
+} else {
+  cat("The test is not significant: the Poisson model is adequate.\n")
+}
+```
+
+### AIC Comparison
+
+```{r aic-comparison, results='asis'}
+aic_table <- data.frame(
+  Model = c("Poisson (full)", "Negative Binomial (full)", "NB with interaction"),
+  AIC = round(c(AIC(poisson_full), AIC(nb_full), AIC(nb_interaction)), 1),
+  `Log-Likelihood` = round(c(as.numeric(logLik(poisson_full)),
+                              as.numeric(logLik(nb_full)),
+                              as.numeric(logLik(nb_interaction))), 1),
+  check.names = FALSE
+)
+knitr::kable(aic_table, row.names = FALSE)
+
+cat("\n*Lower AIC indicates better fit, penalised for model complexity.*\n")
+```
+
+### Coefficient Comparison
+
+A key consequence of overdispersion: the Poisson model produces **artificially small standard errors**, making predictors appear more significant than they truly are. The NB model provides more honest uncertainty estimates.
+
+```{r coef-comparison, results='asis', fig.width=10, fig.height=5}
+vars <- c("income_10k", "distance_to_border_km", "year_centered")
+var_labels <- c("Income (10k CHF)", "Distance to Border (km)", "Year")
+
+comp_data <- data.frame(
+  Variable = rep(var_labels, 2),
+  Model = rep(c("Poisson", "Negative Binomial"), each = 3),
+  Estimate = c(pois_coefs[vars, "Estimate"], nb_coefs[vars, "Estimate"]),
+  SE = c(pois_coefs[vars, "Std. Error"], nb_coefs[vars, "Std. Error"])
+)
+
+ggplot(comp_data, aes(x = Variable, y = Estimate, color = Model)) +
+  geom_point(position = position_dodge(width = 0.5), size = 3) +
+  geom_errorbar(aes(ymin = Estimate - 1.96 * SE, ymax = Estimate + 1.96 * SE),
+                position = position_dodge(width = 0.5), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = c("Poisson" = "#d95f02", "Negative Binomial" = "#2c7fb8")) +
+  coord_flip() +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Coefficient Estimates: Poisson vs. Negative Binomial",
+    subtitle = "Error bars = 95% confidence intervals",
+    x = NULL,
+    y = "Coefficient Estimate",
+    color = NULL
+  )
+```
+
+The coefficient estimates are similar between both models, but the NB confidence intervals are substantially wider — reflecting the true uncertainty in the data. Any predictor that is "significant" under both models can be considered robustly supported.
+
+### Observed vs. Predicted
+
+```{r obs-vs-pred, fig.width=10, fig.height=5}
+model_data <- model_data %>%
+  mutate(
+    pred_poisson = predict(poisson_full, type = "response"),
+    pred_nb = predict(nb_full, type = "response")
+  )
+
+pred_long <- model_data %>%
+  select(Straftaten_total, pred_poisson, pred_nb) %>%
+  pivot_longer(cols = c(pred_poisson, pred_nb),
+               names_to = "model",
+               values_to = "predicted") %>%
+  mutate(model = recode(model,
+                        "pred_poisson" = "Poisson",
+                        "pred_nb" = "Negative Binomial"))
+
+ggplot(pred_long, aes(x = predicted, y = Straftaten_total, color = model)) +
+  geom_point(alpha = 0.3, size = 1.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+  scale_x_log10() +
+  scale_y_log10() +
+  facet_wrap(~ model) +
+  scale_color_manual(values = c("Poisson" = "#d95f02", "Negative Binomial" = "#2c7fb8")) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Observed vs. Predicted Burglary Counts",
+    subtitle = "Dashed line = perfect prediction (log-log scale)",
+    x = "Predicted Count",
+    y = "Observed Count"
+  ) +
+  theme(legend.position = "none")
+```
+
+### Residual Diagnostics
+
+```{r residual-diagnostics, fig.width=10, fig.height=5}
+model_data <- model_data %>%
+  mutate(
+    resid_poisson = residuals(poisson_full, type = "pearson"),
+    resid_nb = residuals(nb_full, type = "pearson")
+  )
+
+resid_long <- model_data %>%
+  select(resid_poisson, resid_nb) %>%
+  pivot_longer(everything(),
+               names_to = "model",
+               values_to = "residual") %>%
+  mutate(model = recode(model,
+                        "resid_poisson" = "Poisson",
+                        "resid_nb" = "Negative Binomial"))
+
+ggplot(resid_long, aes(x = residual)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 50,
+                 fill = "#2c7fb8", alpha = 0.7) +
+  stat_function(fun = dnorm, color = "#d95f02", linewidth = 1) +
+  facet_wrap(~ model, scales = "free_x") +
+  coord_cartesian(xlim = c(-5, 15)) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Distribution of Pearson Residuals",
+    subtitle = "Orange curve = standard normal (expected for a well-fitting model)",
+    x = "Pearson Residual",
+    y = "Density"
+  )
+```
+
+```{r residual-summary, results='asis'}
+cat("| Model | Mean | SD |\n")
+cat("|-------|------|----|\n")
+cat(paste0("| Poisson | ", round(mean(model_data$resid_poisson), 3),
+           " | ", round(sd(model_data$resid_poisson), 3), " |\n"))
+cat(paste0("| Negative Binomial | ", round(mean(model_data$resid_nb), 3),
+           " | ", round(sd(model_data$resid_nb), 3), " |\n"))
+cat("\n*For a well-fitting model: mean ≈ 0, SD ≈ 1.*\n")
+```
+
+## Hypothesis Assessment
+
+```{r hypothesis-assessment, results='asis'}
+nb_p_income <- nb_coefs["income_10k", "Pr(>|z|)"]
+nb_p_border <- nb_coefs["distance_to_border_km", "Pr(>|z|)"]
+nb_p_year <- nb_coefs["year_centered", "Pr(>|z|)"]
+int_p <- int_coefs["income_10k:distance_to_border_km", "Pr(>|z|)"]
+
+cat("**H1 — Income and Burglaries:** ")
+if (nb_p_income < 0.05) {
+  direction <- ifelse(nb_coefs["income_10k", "Estimate"] > 0, "positive", "negative")
+  cat(paste0("Significant (p = ", formatC(nb_p_income, format = "e", digits = 2),
+             "). The relationship is **", direction, "** — ",
+             ifelse(direction == "positive",
+                    "wealthier municipalities do show higher burglary rates, supporting H1.",
+                    "wealthier municipalities actually show *lower* burglary rates, contradicting H1."),
+             "\n\n"))
+} else {
+  cat(paste0("Not significant (p = ", formatC(nb_p_income, format = "e", digits = 2),
+             ") in the NB model. Income is not a reliable predictor of burglary rates ",
+             "when overdispersion is properly accounted for. **H1 is not supported.**\n\n"))
+}
+
+cat("**H2 — Border Proximity and Burglaries:** ")
+if (nb_p_border < 0.05) {
+  cat(paste0("Significant (p = ", formatC(nb_p_border, format = "e", digits = 2),
+             "). Each kilometre further from the border is associated with a change in ",
+             "burglary rate by a factor of ", round(exp(nb_coefs["distance_to_border_km", "Estimate"]), 4),
+             ". **H2 is supported.**\n\n"))
+} else {
+  cat(paste0("Not significant (p = ", formatC(nb_p_border, format = "e", digits = 2),
+             ") in the NB model. **H2 is not supported.**\n\n"))
+}
+
+cat("**H3 — Combined Effect:** ")
+if (int_p < 0.05) {
+  cat(paste0("The interaction between income and border distance is significant (p = ",
+             formatC(int_p, format = "e", digits = 2),
+             "). The effect of income on burglaries depends on border proximity. **H3 is supported.**\n"))
+} else {
+  cat(paste0("The interaction between income and border distance is not significant (p = ",
+             formatC(int_p, format = "e", digits = 2),
+             "). While both variables may contribute independently, their combined effect ",
+             "does not improve the model beyond their individual contributions. ",
+             "**H3 is not supported in its interaction form.**\n"))
+}
+```
+
+# Chapter of Choice
+
+# Conclusions
+
+## Key Findings
+
+## Limitations
+
+# Generative AI Reflection
