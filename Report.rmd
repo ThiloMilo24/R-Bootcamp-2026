@@ -1,25 +1,27 @@
 ---
-title: "Income, Crime, and Accidents in Canton Zurich"
+title: "Income, Crime, and Borders in Canton Zurich"
 author: "Thilo Holstein, Hans Josef Thalathara"
 date: "2026-01-26"
 output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: '3'
+    number_sections: true
   html_document:
     toc: true
     toc_depth: 3
     number_sections: true
     theme: default
-  pdf_document:
-    toc: true
-    toc_depth: '3'
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 library(readr)
+library(MASS)
 library(dplyr)
 library(sf)
 library(ggplot2)
 library(tidyr)
-library(MASS)
 library(scales)
 library(gridExtra)
 
@@ -28,7 +30,8 @@ source("Scripts/Data Preparation.R")
 
 # Introduction
 
-This project explores how income levels relate to crime (burglaries) across municipalities in Canton Zurich, and whether geographic proximity to the national border plays an additional role.
+Burglary patterns across Swiss municipalities have long been a subject of practical interest for law enforcement agencies. Anecdotal observations from the Canton of Basel-Landschaft suggest that burglaries may occur more frequently in wealthier municipalities, particularly those situated closer to Switzerland's international borders. While such observations are valuable for informing local police work, they raise broader questions about whether similar patterns exist elsewhere and what factors might explain them.
+This analysis examines whether these observed trends hold in the Canton of Zurich by investigating the relationship between municipal burglary rates and two key variables: household income levels and proximity to national borders. Rather than assuming that Basel-Landschaft's patterns are universally applicable, we approach this as an empirical question and testing whether income and border proximity are associated with burglary rates in a different cantonal context. By doing so, we aim to move beyond localized observations toward a more systematic understanding of the spatial and socioeconomic factors that may influence property crime across Swiss municipalities.
 
 ## Research Question
 
@@ -40,40 +43,260 @@ We analyse open data from Canton Zurich to investigate the relationship between 
 
 ## Hypotheses
 
-**H1 -- Income and Burglaries:**
+**H1 – Income and Burglaries:**
 Municipalities with higher median income exhibit higher burglary rates, as wealthier areas may present more attractive targets.
 
-**H2 -- Border Proximity and Burglaries:**
-Municipalities closer to the national border exhibit higher burglary rates, potentially due to cross-border crime dynamics.
+**H2 – National Border Proximity and Burglaries:**
+Municipalities located closer to national borders may experience higher burglary rates due to reduced distances to potential escape routes across international boundaries.
 
 **H3 -- Combined Effect:**
 Income and border proximity jointly predict burglary rates better than either variable alone.
 
 # Data Sources
 
-## Income Data
-
-Average taxable income by municipality (Canton Zurich).
+Our analysis draws on five publicly available datasets from three different sources, provided in two distinct formats (CSV and GeoPackage). All data were downloaded locally and are included in the project repository.
 
 ## Burglary Data
 
-Burglary statistics by municipality (Canton Zurich).
+Burglary statistics by municipality and city district for Canton Zurich (2009--2024), published by the Canton of Zurich on the Open Data portal (data.zh.ch). The dataset contains approximately 15,000 records with variables including municipality identifiers, year, offence type, number of offences, population, and burglary rate per 1,000 inhabitants. Format: CSV.
+
+## Income Data
+
+Two separate income datasets were used:
+
+- **Canton level:** Median taxable income by municipality (2009--2022), published by the Statistical Office of Canton Zurich (data.zh.ch). Format: CSV.
+- **City district level:** Median taxable income by city district for the city of Zurich (2009--2023), published by the City of Zurich (data.stadt-zuerich.ch). Format: CSV.
+
+The two datasets were joined at different spatial levels to achieve complete income coverage across both municipalities and city districts.
 
 ## Geographic Data
 
-Municipality boundaries, city district boundaries, and Swiss national borders (swisstopo).
+- **Municipality boundaries:** GeoPackage of municipal boundaries for Canton Zurich (data.zh.ch), used for spatial visualisation and as join keys for the burglary and income data.
+- **City district boundaries:** GeoPackage of Zurich city district boundaries (data.stadt-zuerich.ch), providing geometries for the 12 Stadtkreise.
+- **Swiss national borders:** GeoPackage from swisstopo (swissBOUNDARIES3D), used to calculate each municipality's distance to the nearest national border.
 
 # Cleaning and Formatting the Dataset
 
 ## Data Formatting
 
+Burglary data for the canton of Zurich were restricted to records representing total burglaries (“Einbrüche insgesamt”), which was the sum across different burglary types. Observations with unknown municipality names or unknown city districts were excluded. Variables related to legal references were removed, as they were not required for the analysis.
+
+Median income data were integrated at two seperate spatial levels. At the municipality level, median income data from Canton Zurich were filtered to exclude cantonal aggregates and the city of Zurich itself. The dataset was reduced to essential variables: municipality identifier, name, year, and income value. At the city district level, median income data for the city of Zurich were filtered to include only the standard tax rate, and converted from thousands to actual values by multiplying the 50th percentile income by 1000.
+
+Spatial boundary data for municipalities in the canton of Zurich were obtained from an official GeoPackage. Only geometries corresponding to municipalities were retained, while non-municipality and city-level geometries were excluded. The dataset was reduced to the municipality identifier and the corresponding geometry.
+
+Swiss national border data were sourced from swisstopo and imported from a GeoPackage file. The data were filtered to retain only the Swiss national boundary. The polygon representation of the national territory was converted into a boundary line to enable distance calculations.
+
+Prior to spatial analysis, all municipality geometries were transformed to a common coordinate reference system matching that of the Swiss border data. For each municipality, the centroid of the polygon geometry was computed. Euclidean distances from these centroids to the Swiss national border line were then calculated. Distances were stored in meters and additionally converted into kilometers for interpretability.
+
+City district geometries for the city of Zurich were processed separately. Because the original dataset contained curved polygon geometries, the data were converted into standard multipolygon geometries using GDAL utilities. The converted geometries were subsequently imported, restricted to district identifiers and geometries, and transformed to the same coordinate reference system as the Swiss border data. Centroids were calculated for each city district, and distances to the Swiss national border were computed analogously to the municipality-level analysis, again expressed in both meters and kilometers.
+
+```{r echo = FALSE, include = FALSE}
+## Burglary data canton ZH
+ebd <- read.csv("Data/KTZH_EBD.csv")
+
+# Remove unnecessary records
+ebd <- ebd %>% 
+  filter(Tatbestand == 'Einbrüche insgesamt', 
+         Gemeindename != "unbekannt ZH",
+         Stadtkreis_Name != "unbekannt") %>% 
+  select(-c(Gesetz_Nummer, Gesetz_Abk))
+
+## Income data on municipality level
+income_kt <- read.csv("Data/KTZH_Income_median.csv")
+
+# Remove non-municipality and city data and unused columns
+income_kt <- income_kt %>% 
+  filter(!BFS_NR %in% c(0, 261)) %>% 
+  select(BFS_NR, GEBIET_NAME, INDIKATOR_JAHR, INDIKATOR_VALUE) %>% 
+  rename(INCOME_VALUE = INDIKATOR_VALUE)
+
+## Income data on city district level
+income_st <- read.csv("Data/STZH_Income_median.csv")
+
+income_st <- income_st %>% 
+  filter(SteuerTarifLang == "Grundtarif") %>% 
+  select(-c("KreisSort", 
+            "KreisCd", 
+            "SteuerTarifSort", 
+            "SteuerTarifCd",
+            "SteuerTarifLang")) %>% 
+  mutate(INCOME_VALUE = SteuerEinkommen_p50 * 1000)
+
+# Read .gpkg of municipalities
+ktzh_gpkg <- st_read("Data/KTZH_Gemeindegrenzen_OGD.gpkg", 
+                             layer = "UP_GEMEINDEN_SEEN_F")
+
+# Remove non-municipality and city geoms
+ktzh_geom <- ktzh_gpkg %>% 
+  filter(!ktzh_gpkg$BFS %in% c(0, 261), ktzh_gpkg$ART_CODE == 1) %>% 
+  select(BFS, geom)
+
+# Read .gpkg of swiss borders (swisstopo)
+swiss_borders <- st_read("Data/CH_Borders_swisstopo.gpkg", 
+                         layer = "tlm_landesgebiet")
+
+swiss_borders <- swiss_borders %>% 
+  filter(swiss_borders$icc == "CH")
+
+# Calculate distance to border
+swiss_border_line <- st_boundary(swiss_borders)
+
+# Ensure same CRS
+ktzh_geom <- st_transform(ktzh_geom, st_crs(swiss_borders))
+
+# Calculate distance to border
+ktzh_geom <- ktzh_geom %>% 
+  st_transform(st_crs(swiss_borders)) %>%
+  mutate(
+    distance_to_border = st_distance(st_centroid(.), swiss_border_line)[,1],
+    distance_to_border_km = as.numeric(distance_to_border) / 1000
+  ) %>% 
+  select(BFS, geom, distance_to_border, distance_to_border_km)
+
+# Convert the city district .gpkg CURVEPOLYGON TO MULTIPOLYGON using gdal_utils
+gdal_utils(
+  util = "vectortranslate",
+  source = "Data/STZH_Stadtkreise_OGD.gpkg",
+  destination = "Data/STZH_lin.gpkg",
+  options = c("-nlt", "MULTIPOLYGON", 
+              "-lco", "GEOMETRY_NAME=geom",
+              "-overwrite")
+)
+
+# Read the converted file
+stzh_gpkg <- st_read("Data/STZH_lin.gpkg")
+
+stzh_geom <- stzh_gpkg %>% 
+  select(kname, geom) %>% 
+  st_transform(st_crs(swiss_borders)) %>% 
+  mutate(
+    distance_to_border = st_distance(st_centroid(.), swiss_border_line)[,1],
+    distance_to_border_km = as.numeric(distance_to_border) / 1000
+  )
+```
+
 ## Investigating Missing Values
+
+After joining the datasets, 353 of 2,735 observations (12.9%) have missing values in the income variable (`INCOME_VALUE`). These missing values arise from three distinct causes:
+
+- **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset.
+- **2024 (171 missing):** No income data are available for any municipality or city district.
+- **2009--2014 (24 missing):** Four municipalities (Stammheim, Wädenswil, Elgg, and Horgen) lack income records prior to 2015, likely due to later inclusion in the cantonal statistics.
+
+All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied.
+
+We retain the full dataset for descriptive and spatial analyses (maps, time series, distributions), where income is not required. For all analyses involving income as a variable -- including the correlation matrix, scatterplots, and regression models -- observations with missing income values are excluded. This approach maximises the use of available data while ensuring that statistical models are estimated on complete cases only.
 
 ## Joining the Datasets
 
+```{r include = TRUE}
+# Merge data sets
+data <- ebd %>% 
+  left_join(income_kt, 
+            by = c("Gemeinde_BFS_Nr" = "BFS_NR",
+                   "Ausgangsjahr" = "INDIKATOR_JAHR")) %>% 
+  left_join(income_st %>% 
+              select(KreisLang, StichtagDatJahr, INCOME_VALUE) %>% 
+              rename(INCOME_VALUE_ST = INCOME_VALUE),
+            by = c("Stadtkreis_Name" = "KreisLang",
+                   "Ausgangsjahr" = "StichtagDatJahr")) %>% 
+  mutate(INCOME_VALUE = if_else(!is.na(INCOME_VALUE_ST), 
+                                INCOME_VALUE_ST, 
+                                INCOME_VALUE)) %>% 
+  select(-INCOME_VALUE_ST)
+
+# Join geoms of the municipalities
+data <- data %>% 
+  left_join(ktzh_geom, by = c("Gemeinde_BFS_Nr" = "BFS"))
+
+# Convert data's geometry to MULTIPOLYGON first
+data <- data %>%
+  mutate(geom = st_cast(geom, "MULTIPOLYGON"))
+
+# Join and replace only the EMPTY geometries
+data <- data %>%
+  left_join(
+    stzh_geom %>%
+      select(kname, 
+             geom_stzh = geom, 
+             distance_to_border_stzh = distance_to_border, 
+             distance_to_border_km_stzh = distance_to_border_km),
+    by = c("Stadtkreis_Name" = "kname")
+  ) %>%
+  mutate(
+    geom = if_else(st_is_empty(geom) & !is.na(geom_stzh), 
+                   geom_stzh, 
+                   geom),
+    distance_to_border = coalesce(distance_to_border_stzh, distance_to_border),
+    distance_to_border_km = coalesce(distance_to_border_km_stzh, distance_to_border_km)
+  ) %>%
+  select(-geom_stzh, -distance_to_border_stzh, -distance_to_border_km_stzh) %>%
+  st_as_sf() %>% 
+  mutate(Gemeinde_BFS_Nr = if_else(Gemeindename == "Zürich", 
+                                   Stadtkreis_BFS_Nr, 
+                                   Gemeinde_BFS_Nr))
+```
+
 # Exploratory Data Analysis
 
-Before testing our hypotheses through formal modelling, we explore the data visually. This section begins with a descriptive overview of the dataset, then follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
+Before testing our hypotheses through formal modelling, we explore the data visually. This section begins with a spatial overview of burglary patterns across the canton, then follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
+
+## Spatial Overview: Burglary Rates by Municipality
+
+The following maps show the total number of burglaries per municipality, normalised by average population, across the full observation period. This provides a first visual impression of how burglary risk is distributed geographically.
+
+```{r echo = FALSE, fig.show='hold'}
+# City outline for map
+# Create the outer boundary of Zurich city
+city_outline <- data %>%
+  filter(!is.na(Stadtkreis_BFS_Nr)) %>%
+  st_union()  # Dissolves all districts into one polygon
+
+# Get bounding box of municipalities
+bbox <- st_bbox(ktzh_geom)
+padding <- 5000  # in map units (meters for Swiss CRS)
+
+# Plot the crime rate across whole data set
+ebd_per_gmd <- data %>% 
+  group_by(Gemeinde_BFS_Nr) %>% 
+  mutate(Total_EBD = sum(Straftaten_total, na.rm = TRUE), 
+         Einwohner_avg = mean(Einwohner, na.rm = TRUE),
+         EBD_pop_ratio = Total_EBD / Einwohner_avg) %>% 
+  summarise(across(c(geom, Einwohner_avg, Total_EBD, EBD_pop_ratio), first),
+  .groups = "drop") %>% 
+  st_as_sf()
+
+ggplot() +
+  geom_sf(data = swiss_borders, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = ebd_per_gmd, aes(fill = EBD_pop_ratio), color = "white", linewidth = 0.3) +
+  geom_sf(data = city_outline, 
+          fill = NA, 
+          color = "black", 
+          size = 0.5) +
+  scale_fill_viridis_c(name = "EBD ratio per population") +
+  coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
+           ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
+  theme_minimal() +
+  labs(title = "Number of Burglaries per Municipality by Population")
+```
+
+The city district Kreis 1 seems to be a strong outlier in the data. To have a more balanced output of the burglary rate per municipality and population, this is how the map of the canton of Zurich looks without the outlier:
+
+```{r echo = FALSE}
+ggplot() +
+  geom_sf(data = swiss_borders, fill = NA, color = "black", linewidth = 1) +
+  geom_sf(data = ebd_per_gmd %>% filter(Gemeinde_BFS_Nr != 2610001), aes(fill = EBD_pop_ratio), color = "white", linewidth = 0.3) +
+  geom_sf(data = city_outline, 
+          fill = NA, 
+          color = "black", 
+          size = 0.5) +
+  scale_fill_viridis_c(name = "EBD ratio per population") +
+  coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
+           ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
+  theme_minimal() +
+  labs(title = "Number of Burglaries per Municipality by Population (without Kreis 1)")
+```
 
 ## Descriptive Overview
 
@@ -353,7 +576,7 @@ We classify all municipalities into four quadrants based on whether their median
 ```{r cluster-plot, fig.width=10, fig.height=7}
 cluster_data <- data %>%
   st_drop_geometry() %>%
-  group_by(Gemeinde_BFS_Nr, Gemeindename) %>%
+  group_by(Gemeinde_BFS_Nr, Gemeindename, Stadtkreis_Name) %>%
   summarise(
     income_median = median(INCOME_VALUE, na.rm = TRUE),
     haeufigkeit_mean = mean(Häufigkeitszahl, na.rm = TRUE),
@@ -361,7 +584,10 @@ cluster_data <- data %>%
     distance_to_border_km = first(distance_to_border_km),
     .groups = "drop"
   ) %>%
-  filter(!is.na(income_median), !is.na(haeufigkeit_mean))
+  filter(!is.na(income_median), !is.na(haeufigkeit_mean)) %>%
+  mutate(display_name = if_else(Gemeindename == "Zürich",
+                                paste0("Zürich - ", Stadtkreis_Name),
+                                Gemeindename))
 
 income_threshold <- median(cluster_data$income_median)
 crime_threshold <- median(cluster_data$haeufigkeit_mean)
@@ -386,7 +612,7 @@ ggplot(cluster_data, aes(x = income_median, y = haeufigkeit_mean,
   geom_text(data = cluster_data %>%
               filter(haeufigkeit_mean > quantile(haeufigkeit_mean, 0.95) |
                      einwohner_mean > quantile(einwohner_mean, 0.95)),
-            aes(label = Gemeindename),
+            aes(label = display_name),
             size = 3, nudge_y = 0.5, show.legend = FALSE) +
   scale_color_manual(values = c(
     "High Income / High Crime" = "#e41a1c",
@@ -760,6 +986,8 @@ cat(paste0("| Negative Binomial | ", round(mean(model_data$resid_nb), 3),
 cat("\n*For a well-fitting model: mean ≈ 0, SD ≈ 1.*\n")
 ```
 
+Across all comparison criteria -- the likelihood ratio test, AIC, coefficient uncertainty, and residual diagnostics -- the Negative Binomial model consistently outperforms the Poisson. The Poisson model's assumption of equidispersion is clearly violated, leading to artificially narrow confidence intervals and overly optimistic p-values. We therefore adopt the **Negative Binomial full model** as our primary model for all subsequent hypothesis tests.
+
 ## Hypothesis Assessment
 
 ```{r hypothesis-assessment, results='asis'}
@@ -814,6 +1042,28 @@ if (int_p < 0.05) {
 
 ## Key Findings
 
+This analysis set out to test whether anecdotal observations from Basel-Landschaft -- that burglaries concentrate in wealthier, border-proximate municipalities -- hold in the Canton of Zurich. The results paint a more nuanced picture than expected.
+
+**Income is not a meaningful predictor of burglary rates.** Contrary to the intuition behind H1, wealthier municipalities in Canton Zurich do not experience systematically higher burglary rates. The exploratory scatterplot showed no meaningful relationship, and the Negative Binomial regression confirmed that income is not statistically significant once overdispersion is properly accounted for. This suggests that the "wealthy municipalities attract burglars" narrative, while intuitively appealing, does not hold up to empirical scrutiny in this context.
+
+**Border proximity is the strongest spatial predictor.** Municipalities closer to the Swiss national border consistently exhibit higher burglary rates, a pattern that persists across the entire observation period (2009--2024) and survives formal modelling. Each additional kilometre away from the border is associated with a measurable decrease in the expected burglary rate. This finding supports H2 and aligns with the hypothesis that proximity to international borders may facilitate cross-border property crime.
+
+**The combined effect of income and border proximity does not improve prediction.** The interaction model (H3) did not yield a significant interaction term. Income and border proximity do not amplify each other's effects -- border distance matters regardless of income level, and income remains irrelevant regardless of distance to the border.
+
+**Burglary rates have declined substantially over time.** Across all municipalities and border distance categories, burglary rates have fallen markedly since 2009. This canton-wide trend is captured by the year variable in the model and likely reflects broader factors such as improved security measures, changes in policing strategies, or shifts in criminal behaviour.
+
 ## Limitations
+
+Several limitations should be considered when interpreting these results.
+
+**Ecological fallacy.** All analyses operate at the municipal level. We observe that municipalities closer to the border have higher burglary rates, but we cannot conclude that individual burglaries are committed by cross-border offenders. The spatial pattern could reflect other correlated factors.
+
+**Centroid distance as a proxy.** Border distance is measured from each municipality's geographic centroid to the nearest national border. This is a simplification -- municipalities with irregular shapes or large areas may have actual border distances that differ substantially from the centroid measure.
+
+**No causal identification.** This is an observational study. The associations we find between border distance and burglary rates could be driven by unobserved confounders such as urbanisation, transport infrastructure, policing intensity, or local socioeconomic conditions that correlate with border proximity.
+
+**Incomplete income data.** Income data are unavailable for 2023--2024 and for four municipalities prior to 2015, limiting the temporal scope of income-related analyses to 2009--2022. While this affects only the income-dependent analyses and is documented in Section 3.2, it means our models cannot capture the most recent developments.
+
+**Single canton.** The analysis is restricted to Canton Zurich. The patterns observed here may not generalise to other cantons, particularly those with different border configurations (e.g., Basel-Landschaft, Geneva, or Ticino).
 
 # Generative AI Reflection
