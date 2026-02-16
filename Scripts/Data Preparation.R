@@ -215,7 +215,7 @@ ggplot() +
           color = "black", 
           size = 0.5) +
   scale_fill_viridis_c(name = "EBD ratio per population") +
-  coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
+  coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding),
            ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
   theme_minimal() +
   labs(title = "Number of Burglaries per Municipality by Population")
