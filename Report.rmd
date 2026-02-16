@@ -20,6 +20,8 @@ library(readr)
 library(dplyr)
 library(sf)
 library(ggplot2)
+library(knitr)
+library(kableExtra)
 ```
 
 # Introduction
@@ -29,11 +31,11 @@ This analysis examines whether these observed trends hold in the Canton of Zuric
 
 ## Research Question
 
-How does income level and the proximity to the national borders relate to both crime rate (burglaries) across municipalities in Canton Zurich?
+How does income level and the proximity to the national borders relate to crime rate (burglaries) across municipalities in Canton Zurich?
 
 ## Approach
 
-We analyse open data from Canton Zurich to investigate a triangular relationship between income, proximity to Switzerland's national borders, and burglaries at the municipal level. By joining multiple datasets, we examine whether income predicts crime independently, and whether crime and accidents share a connection beyond what income alone explains.
+We analyse open data from Canton Zurich to investigate a triangular relationship between income, proximity to Switzerland's national borders, and burglaries at the municipal level. By joining multiple datasets, we examine whether income predicts crime independently, and whether crime and border proximity share a connection beyond what income alone explains.
 
 ## Hypotheses
 
@@ -47,15 +49,20 @@ Municipalities located closer to national borders may experience higher burglary
 
 ## Income Data
 
-Median taxable income by municipality (Canton Zurich).
+Median taxable income by municipality (Canton Zurich). Available data from 1999 to 2022.  
+https://opendata.swiss/de/dataset/steuerb-einkommen-naturl-pers-median-fr
+
+Median taxable income by district of the city of Zurich. Available data from 1999 to 2023.  
+https://www.zh.ch/de/politik-staat/statistik-daten/datenkatalog.html#/datasets/246@statistisches-amt-kanton-zuerich
 
 ## Burglary Data
 
-Burglary statistics by municipality (Canton Zurich).
+Burglary statistics by municipality (Canton Zurich). Available data from 2009 to 2024.  
+https://opendata.swiss/de/dataset/anzahl-einbruche-nach-gemeinden-des-kantons-zurich
 
 ## Additional Data
 
-Geopackages of Swiss national borders, municipalities of the canton of Zurich and city districts of the city of Zurich
+Geopackages of Swiss national borders, municipalities of the canton of Zurich and city districts of the city of Zurich.
 
 # Cleaning and Formatting the Dataset
 
@@ -75,10 +82,10 @@ City district geometries for the city of Zurich were processed separately. Becau
 
 ```{r echo = FALSE, include = FALSE}
 ## Burglary data canton ZH
-ebd <- read.csv("Data/KTZH_EBD.csv")
+ktzh_ebd <- read.csv("Data/KTZH_EBD.csv")
 
 # Remove unnecessary records
-ebd <- ebd %>% 
+ebd <- ktzh_ebd %>% 
   filter(Tatbestand == 'Einbrüche insgesamt', 
          Gemeindename != "unbekannt ZH",
          Stadtkreis_Name != "unbekannt") %>% 
@@ -160,6 +167,200 @@ stzh_geom <- stzh_gpkg %>%
 
 ## Investigating Missing Values
 
+```{r echo = FALSE}
+# 1. EBD dataset - check data availability by municipality
+ebd_years <- unique(ebd$Ausgangsjahr)
+ebd_year_range <- range(ebd_years)
+
+ebd_coverage <- ebd %>%
+  group_by(Gemeinde_BFS_Nr, Gemeindename) %>%
+  summarise(
+    min_year = min(Ausgangsjahr),
+    max_year = max(Ausgangsjahr),
+    n_years = n_distinct(Ausgangsjahr),
+    missing_years = max(ebd_years) - min(ebd_years) + 1 - n_years,
+    dataset = "Burglary",
+    .groups = 'drop'
+  )
+
+incomplete_ebd <- ebd_coverage %>%
+  filter(min_year > min(ebd_years) | max_year < max(ebd_years) | missing_years > 0)
+
+# 2. Income_st dataset - check data availability
+income_st_years <- unique(income_st$StichtagDatJahr)
+income_st_year_range <- range(income_st_years)
+
+income_st_coverage <- income_st %>%
+  group_by(KreisLang) %>%
+  summarise(
+    min_year = min(StichtagDatJahr),
+    max_year = max(StichtagDatJahr),
+    n_years = n_distinct(StichtagDatJahr),
+    missing_years = max(income_st_years) - min(income_st_years) + 1 - n_years,
+    dataset = "Income (City Districts)",
+    .groups = 'drop'
+  ) %>%
+  rename(Gemeindename = KreisLang) %>%
+  mutate(Gemeinde_BFS_Nr = NA_integer_)
+
+# 3. Income_kt dataset - check data availability
+income_kt_years <- unique(income_kt$INDIKATOR_JAHR)
+income_kt_year_range <- range(income_kt_years)
+
+income_kt_coverage <- income_kt %>%
+  group_by(BFS_NR, GEBIET_NAME) %>%
+  summarise(
+    min_year = min(INDIKATOR_JAHR),
+    max_year = max(INDIKATOR_JAHR),
+    n_years = n_distinct(INDIKATOR_JAHR),
+    missing_years = max(income_kt_years) - min(income_kt_years) + 1 - n_years,
+    dataset = "Income (Canton)",
+    .groups = 'drop'
+  ) %>%
+  rename(Gemeinde_BFS_Nr = BFS_NR, Gemeindename = GEBIET_NAME)
+
+# Combine all coverage data
+all_coverage <- bind_rows(
+  ebd_coverage %>% select(Gemeinde_BFS_Nr, Gemeindename, n_years, min_year, max_year, missing_years, dataset),
+  income_st_coverage %>% select(Gemeinde_BFS_Nr, Gemeindename, n_years, min_year, max_year, missing_years, dataset),
+  income_kt_coverage %>% select(Gemeinde_BFS_Nr, Gemeindename, n_years, min_year, max_year, missing_years, dataset)
+)
+
+# # Summary table of available years per dataset
+# year_summary <- all_coverage %>%
+#   group_by(dataset) %>%
+#   summarise(
+#     Dataset_Min_Year = min(min_year),
+#     Dataset_Max_Year = max(max_year),
+#     Year_Range = paste(min(min_year), "-", max(max_year)),
+#     Total_Entities = n(),
+#     Avg_Years_Available = round(mean(n_years), 1),
+#     Entities_With_Missing_Years = sum(missing_years > 0),
+#     .groups = "drop"
+#   )
+
+# Simple boxplot with jitter - no annotations
+p1 <- ggplot(all_coverage, aes(x = dataset, y = n_years, fill = dataset)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.3, size = 1) +
+  labs(
+    title = "Data Availability Comparison Across Datasets",
+    x = "Dataset",
+    y = "Number of Years Available",
+    fill = "Dataset"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Display plot
+print(p1)
+```
+The datasets employed in this analysis vary in their temporal completeness across the observation period from 1999 to 2023. Among the three primary data sources, only the income data for city districts (Stadt Zurich) provide complete coverage for all geographic units across the entire timeframe, with no missing observations.
+The burglary dataset exhibits minimal missingness, with one municipality showing absent data for reasons that could not be determined from the available documentation. The limited scope of this gap suggests negligible impact on the overall analysis.
+Income data at the cantonal level (municipal aggregation) demonstrate more substantial incompleteness, with several municipalities missing data for specific years. Table 1 provides a detailed breakdown of missing observations by municipality and year, allowing for transparent assessment of potential limitations in temporal coverage.
+
+```{r echo = FALSE, results = 'asis'}
+all_coverage %>%
+  filter(missing_years > 0) %>%
+  arrange(dataset, n_years) %>%
+  select(dataset, Gemeindename, Gemeinde_BFS_Nr, n_years, missing_years, start_year = min_year, end_year = max_year) %>%
+  kable(caption = "Municipalities with Incomplete Coverage",
+        col.names = c("Dataset", "Municipality", "BFS Nr", "Years Available", 
+                      "Missing Years", "Start Year", "End Year"),
+        format = "latex",
+        longtable = TRUE,
+        booktabs = TRUE) %>%
+  kable_styling(font_size = 9, latex_options = "scale_down")
+```
+
+Further investigation revealed that the missing income data were not random but rather systematic, arising from administrative boundary changes. Between 2015 and 2019, several municipalities in Canton Zurich underwent mergers, resulting in the creation of new administrative units with updated BFS (Federal Statistical Office) identifiers. Specifically:
+
+On 1 January 2019, the former municipalities of Ober-, Unterstammheim, and Waltalingen merged to form the new municipality of Stammheim  
+On 1 January 2019, the former municipalities of Hütten and Schönenberg merged into the municipality of Wädenswil  
+On 1 January 2018, the former municipality of Hofstetten merged into the municipality of Elgg  
+On 1 January 2018, the former municipality of Hirzel merged into the municipality of Horgen  
+On 1 January 2016, Kyburg and Illnau-Effretikon merged to form the municipality of Illnau-Effretikon  
+
+These mergers resulted in discontinued BFS identifiers for the former municipalities, with new identifiers assigned to the merged entities. Consequently, income data appeared "missing" for the merged municipalities in pre-merger years, as these records remained associated with the former municipal identifiers.
+To address this issue, we implemented a systematic reconciliation procedure. For each merged municipality, we first assessed the completeness of income data under the new identifier. Where gaps existed for pre-merger years, we reconstructed the median income values by averaging data from the constituent former municipalities. This approach ensured temporal continuity in the income variable while maintaining geographic consistency with the current administrative boundaries used in the burglary and spatial datasets.
+
+```{r echo = FALSE, include = FALSE}
+# Define merger mapping
+merger_mapping <- tribble(
+  ~old_BFS_Nr, ~new_BFS_Nr, ~merge_year,
+  # Stammheim merger (2019)
+  36,          292,          2019,
+  42,          292,          2019,
+  44,          292,          2019,
+  # Wädenswil merger (2019)
+  134,         293,          2019,
+  140,         293,          2019,
+  142,         293,          2019,
+  # Elgg merger (2018)
+  217,         294,          2018,
+  222,         294,          2018,
+  # Horgen merger (2018)
+  132,         295,          2018,
+  133,         295,          2018,
+  # Illnau-Effretikon merger (2016)
+  174,         296,          2016,
+  175,         296,          2016,
+  # Bauma merger (2015)
+  171,         297,          2015,
+  179,         297,          2015
+)
+
+all_synthetic <- list()
+
+years <- sort(unique(income_kt$INDIKATOR_JAHR))
+
+for (bfs in unique(merger_mapping$new_BFS_Nr)) {
+  
+  old_bfs <- merger_mapping %>% 
+    filter(new_BFS_Nr == bfs) %>% 
+    pull(old_BFS_Nr)
+  
+  bfs_years <- income_kt %>%
+    filter(BFS_NR == bfs) %>%
+    pull(INDIKATOR_JAHR) %>%
+    unique()
+  
+  missing_years <- setdiff(years, bfs_years)
+  
+  if (length(missing_years) > 0) {
+    
+    synthetic <- income_kt %>% 
+      filter(BFS_NR %in% old_bfs,
+             INDIKATOR_JAHR %in% missing_years) %>%
+      group_by(INDIKATOR_JAHR) %>%
+      summarise(
+        INCOME_VALUE = mean(INCOME_VALUE, na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      mutate(BFS_NR = bfs)
+    
+    all_synthetic[[as.character(bfs)]] <- synthetic
+  }
+}
+
+income_old_bfs_all <- bind_rows(all_synthetic) %>%
+  left_join(
+    income_kt %>%
+      select(BFS_NR, GEBIET_NAME) %>%
+      distinct(),
+    by = "BFS_NR"
+  )
+
+# Remove ALL old municipalities
+income_kt <- income_kt %>%
+  filter(!BFS_NR %in% merger_mapping$old_BFS_Nr)
+
+# Add synthetic rows
+income_kt <- income_kt %>%
+  bind_rows(income_old_bfs_all) %>%
+  arrange(BFS_NR, INDIKATOR_JAHR)
+```
+
 ## Joining the Datasets
 
 ```{r include = TRUE}
@@ -214,7 +415,44 @@ data <- data %>%
 
 ## Income Distribution
 
-## Municipality Burglary Boxplots
+<!-- ## Municipality Burglary Boxplots -->
+
+<!-- ```{r} -->
+<!-- # Aggregate burglaries per municipality (across all years) -->
+<!--   burglary_per_municipality <- data %>% -->
+<!--     group_by(Gemeinde_BFS_Nr, Gemeindename) %>% -->
+<!--     summarise( -->
+<!--       Total_Burglaries = sum(Straftaten_total, na.rm = TRUE), -->
+<!--       Mean_Burglaries = mean(Straftaten_total, na.rm = TRUE), -->
+<!--       .groups = "drop" -->
+<!--     ) -->
+
+<!--   # Boxplot of total burglaries per municipality -->
+<!--   ggplot(burglary_per_municipality, aes(y = Total_Burglaries)) + -->
+<!--     geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", outlier.size   = 2) + -->
+<!--     labs( -->
+<!--       title = "Distribution of Total Burglary Cases per Municipality", -->
+<!--       subtitle = "Aggregated across all years (2009-2024)", -->
+<!--       y = "Total Burglaries per Municipality", -->
+<!--       caption = "Each observation is ONE municipality" -->
+<!--     ) + -->
+<!--     theme_minimal() + -->
+<!--     theme(axis.text.x = element_blank(), -->
+<!--           axis.ticks.x = element_blank()) -->
+
+<!-- # Boxplot of average burglaries per municipality -->
+<!--   ggplot(burglary_per_municipality, aes(y = Mean_Burglaries)) + -->
+<!--     geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", outlier.size   = 2) + -->
+<!--     labs( -->
+<!--       title = "Distribution of Average Annual Burglaries per Municipality", -->
+<!--       y = "Average Burglaries per Year", -->
+<!--       caption = "Each observation is ONE municipality" -->
+<!--     ) + -->
+<!--     theme_minimal() + -->
+<!--     theme(axis.text.x = element_blank(), -->
+<!--           axis.ticks.x = element_blank()) -->
+<!-- ``` -->
+
 
 ## Burglary Rates by Municipality
 
@@ -246,7 +484,7 @@ ggplot() +
           fill = NA, 
           color = "black", 
           size = 0.5) +
-  scale_fill_viridis_c(name = "EBD ratio per population") +
+  scale_fill_viridis_c(name = "EBD Ratio per Population") +
   coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
            ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
   theme_minimal() +
@@ -263,7 +501,7 @@ ggplot() +
           fill = NA, 
           color = "black", 
           size = 0.5) +
-  scale_fill_viridis_c(name = "EBD ratio per population") +
+  scale_fill_viridis_c(name = "EBD Ratio per Population") +
   coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
            ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
   theme_minimal() +

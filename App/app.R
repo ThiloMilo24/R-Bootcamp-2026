@@ -4,6 +4,7 @@ library(leaflet)
 library(sf)
 library(dplyr)
 library(readr)
+library(ggplot2)
 
 # Load and prepare data
 load_data <- function() {
@@ -144,6 +145,33 @@ load_data <- function() {
 # Load data once at startup
 data <- load_data()
 
+# Calculate years with complete data
+# Use all years where burglary data exists, since income data is generally complete
+# The data structure changes over time due to municipal mergers, but each year is self-contained
+all_years <- sort(unique(data$Ausgangsjahr))
+
+# Calculate coverage percentage for each year to identify truly incomplete years
+year_coverage <- data %>%
+  st_drop_geometry() %>%
+  group_by(Ausgangsjahr) %>%
+  summarise(
+    total_units = n(),
+    units_with_income = sum(!is.na(INCOME_VALUE)),
+    coverage_pct = (units_with_income / total_units) * 100,
+    .groups = "drop"
+  )
+
+# Keep years with at least 95% income data coverage
+complete_years <- year_coverage %>%
+  filter(coverage_pct >= 95) %>%
+  pull(Ausgangsjahr) %>%
+  sort()
+
+# If no years meet the threshold, use all years
+if (length(complete_years) == 0) {
+  complete_years <- all_years
+}
+
 # Define UI
 ui <- fluidPage(
   titlePanel("Canton Zurich - Income and Burglary Analysis"),
@@ -158,8 +186,7 @@ ui <- fluidPage(
                                     "Select Variable:",
                                     choices = c("Median Income" = "INCOME_VALUE",
                                                 "Population" = "Einwohner",
-                                                "Total Burglaries" = "Straftaten_total",
-                                                "Distance to Border (km)" = "distance_to_border_km"),
+                                                "Total Burglaries" = "Straftaten_total"),
                                     selected = "INCOME_VALUE"),
                         uiOutput("year_slider"),
                         hr(),
@@ -173,6 +200,42 @@ ui <- fluidPage(
                ),
                column(9,
                       leafletOutput("map", height = "700px")
+               )
+             )
+    ),
+
+    tabPanel("Data Explorer",
+             fluidRow(
+               column(3,
+                      wellPanel(
+                        h4("Explorer Controls"),
+                        selectInput("selected_location",
+                                    "Select Municipality/District:",
+                                    choices = NULL),
+                        uiOutput("explorer_year_slider"),
+                        hr(),
+                        h5("Location Information"),
+                        htmlOutput("location_info")
+                      )
+               ),
+               column(9,
+                      fluidRow(
+                        column(6,
+                               plotOutput("income_plot", height = "300px")
+                        ),
+                        column(6,
+                               plotOutput("burglary_plot", height = "300px")
+                        )
+                      ),
+                      hr(),
+                      fluidRow(
+                        column(6,
+                               plotOutput("population_plot", height = "300px")
+                        ),
+                        column(6,
+                               plotOutput("burglary_rate_plot", height = "300px")
+                        )
+                      )
                )
              )
     ),
@@ -204,17 +267,64 @@ ui <- fluidPage(
 # Define server logic
 server <- function(input, output, session) {
 
-  # Dynamic year slider based on selected variable
+  # Dynamic year slider for map - only years with complete data
   output$year_slider <- renderUI({
     req(input$variable)
 
-    years <- sort(unique(data$Ausgangsjahr))
+    if (length(complete_years) == 0) {
+      return(NULL)
+    }
 
     sliderInput("year",
                 "Select Year:",
+                min = min(complete_years),
+                max = max(complete_years),
+                value = max(complete_years),
+                step = 1,
+                sep = "")
+  })
+
+  # Update location choices for Data Explorer
+  observe({
+    location_choices <- data %>%
+      st_drop_geometry() %>%
+      mutate(
+        display_name = if_else(
+          !is.na(Stadtkreis_Name),
+          paste0(Gemeindename, " - ", Stadtkreis_Name),
+          Gemeindename
+        )
+      ) %>%
+      distinct(Gemeinde_BFS_Nr, display_name) %>%
+      arrange(display_name)
+
+    choices <- setNames(location_choices$Gemeinde_BFS_Nr,
+                       location_choices$display_name)
+
+    updateSelectInput(session, "selected_location",
+                     choices = choices,
+                     selected = choices[1])
+  })
+
+  # Dynamic year slider for Data Explorer - all available years
+  output$explorer_year_slider <- renderUI({
+    req(input$selected_location)
+
+    location_data <- data %>%
+      st_drop_geometry() %>%
+      filter(Gemeinde_BFS_Nr == input$selected_location)
+
+    years <- sort(unique(location_data$Ausgangsjahr))
+
+    if (length(years) == 0) {
+      return(NULL)
+    }
+
+    sliderInput("explorer_year",
+                "Select Year Range:",
                 min = min(years),
                 max = max(years),
-                value = max(years),
+                value = c(min(years), max(years)),
                 step = 1,
                 sep = "")
   })
@@ -272,6 +382,155 @@ server <- function(input, output, session) {
     req(input$year)
     df <- filtered_data()
     paste0("Showing ", nrow(df), " municipalities/districts for year ", input$year)
+  })
+
+  # Data Explorer reactive data
+  explorer_data <- reactive({
+    req(input$selected_location, input$explorer_year)
+
+    data %>%
+      st_drop_geometry() %>%
+      filter(
+        Gemeinde_BFS_Nr == input$selected_location,
+        Ausgangsjahr >= input$explorer_year[1],
+        Ausgangsjahr <= input$explorer_year[2]
+      ) %>%
+      arrange(Ausgangsjahr)
+  })
+
+  # Location information text
+  output$location_info <- renderUI({
+    req(input$selected_location)
+
+    location_info <- data %>%
+      st_drop_geometry() %>%
+      filter(Gemeinde_BFS_Nr == input$selected_location) %>%
+      slice(1)
+
+    location_name <- if_else(
+      !is.na(location_info$Stadtkreis_Name),
+      paste0(location_info$Gemeindename, " - ", location_info$Stadtkreis_Name),
+      location_info$Gemeindename
+    )
+
+    distance_km <- round(location_info$distance_to_border_km, 1)
+
+    HTML(paste0(
+      "<strong>Location:</strong> ", location_name, "<br/>",
+      "<strong>BFS Number:</strong> ", location_info$Gemeinde_BFS_Nr, "<br/>",
+      "<strong>Distance to Border:</strong> ", distance_km, " km"
+    ))
+  })
+
+  # Income plot
+  output$income_plot <- renderPlot({
+    req(explorer_data())
+    df <- explorer_data()
+
+    if (nrow(df) == 0 || all(is.na(df$INCOME_VALUE))) {
+      plot.new()
+      text(0.5, 0.5, "No income data available", cex = 1.5)
+      return()
+    }
+
+    ggplot(df, aes(x = Ausgangsjahr, y = INCOME_VALUE)) +
+      geom_line(color = "#440154", size = 1.2) +
+      geom_point(color = "#440154", size = 3) +
+      labs(
+        title = "Median Income Over Time",
+        x = "Year",
+        y = "Median Income (CHF)"
+      ) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(face = "bold", size = 14),
+        axis.title = element_text(size = 11)
+      ) +
+      scale_y_continuous(labels = scales::comma) +
+      scale_x_continuous(breaks = unique(df$Ausgangsjahr))
+  })
+
+  # Burglary plot
+  output$burglary_plot <- renderPlot({
+    req(explorer_data())
+    df <- explorer_data()
+
+    if (nrow(df) == 0 || all(is.na(df$Straftaten_total))) {
+      plot.new()
+      text(0.5, 0.5, "No burglary data available", cex = 1.5)
+      return()
+    }
+
+    ggplot(df, aes(x = Ausgangsjahr, y = Straftaten_total)) +
+      geom_line(color = "#31688e", size = 1.2) +
+      geom_point(color = "#31688e", size = 3) +
+      labs(
+        title = "Total Burglaries Over Time",
+        x = "Year",
+        y = "Total Burglaries"
+      ) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(face = "bold", size = 14),
+        axis.title = element_text(size = 11)
+      ) +
+      scale_x_continuous(breaks = unique(df$Ausgangsjahr))
+  })
+
+  # Population plot
+  output$population_plot <- renderPlot({
+    req(explorer_data())
+    df <- explorer_data()
+
+    if (nrow(df) == 0 || all(is.na(df$Einwohner))) {
+      plot.new()
+      text(0.5, 0.5, "No population data available", cex = 1.5)
+      return()
+    }
+
+    ggplot(df, aes(x = Ausgangsjahr, y = Einwohner)) +
+      geom_line(color = "#35b779", size = 1.2) +
+      geom_point(color = "#35b779", size = 3) +
+      labs(
+        title = "Population Over Time",
+        x = "Year",
+        y = "Population"
+      ) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(face = "bold", size = 14),
+        axis.title = element_text(size = 11)
+      ) +
+      scale_y_continuous(labels = scales::comma) +
+      scale_x_continuous(breaks = unique(df$Ausgangsjahr))
+  })
+
+  # Burglary rate plot (per 1000 residents)
+  output$burglary_rate_plot <- renderPlot({
+    req(explorer_data())
+    df <- explorer_data() %>%
+      mutate(burglary_rate = (Straftaten_total / Einwohner) * 1000)
+
+    if (nrow(df) == 0 || all(is.na(df$burglary_rate))) {
+      plot.new()
+      text(0.5, 0.5, "No data available", cex = 1.5)
+      return()
+    }
+
+    ggplot(df, aes(x = Ausgangsjahr, y = burglary_rate)) +
+      geom_line(color = "#fde724", size = 1.2) +
+      geom_point(color = "#fde724", size = 3) +
+      labs(
+        title = "Burglary Rate Over Time",
+        x = "Year",
+        y = "Burglaries per 1,000 Residents"
+      ) +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(face = "bold", size = 14),
+        axis.title = element_text(size = 11)
+      ) +
+      scale_x_continuous(breaks = unique(df$Ausgangsjahr))
   })
 
   # Render leaflet map
