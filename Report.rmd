@@ -255,6 +255,7 @@ p1 <- ggplot(all_coverage, aes(x = dataset, y = n_years, fill = dataset)) +
 # Display plot
 print(p1)
 ```
+
 The datasets employed in this analysis vary in their temporal completeness across the observation period from 1999 to 2023. Among the three primary data sources, only the income data for city districts (Stadt Zurich) provide complete coverage for all geographic units across the entire timeframe, with no missing observations.
 The burglary dataset exhibits minimal missingness, with one municipality showing absent data for reasons that could not be determined from the available documentation. The limited scope of this gap suggests negligible impact on the overall analysis.
 Income data at the cantonal level (municipal aggregation) demonstrate more substantial incompleteness, with several municipalities missing data for specific years. Table 1 provides a detailed breakdown of missing observations by municipality and year, allowing for transparent assessment of potential limitations in temporal coverage.
@@ -415,45 +416,6 @@ data <- data %>%
 
 ## Income Distribution
 
-<!-- ## Municipality Burglary Boxplots -->
-
-<!-- ```{r} -->
-<!-- # Aggregate burglaries per municipality (across all years) -->
-<!--   burglary_per_municipality <- data %>% -->
-<!--     group_by(Gemeinde_BFS_Nr, Gemeindename) %>% -->
-<!--     summarise( -->
-<!--       Total_Burglaries = sum(Straftaten_total, na.rm = TRUE), -->
-<!--       Mean_Burglaries = mean(Straftaten_total, na.rm = TRUE), -->
-<!--       .groups = "drop" -->
-<!--     ) -->
-
-<!--   # Boxplot of total burglaries per municipality -->
-<!--   ggplot(burglary_per_municipality, aes(y = Total_Burglaries)) + -->
-<!--     geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", outlier.size   = 2) + -->
-<!--     labs( -->
-<!--       title = "Distribution of Total Burglary Cases per Municipality", -->
-<!--       subtitle = "Aggregated across all years (2009-2024)", -->
-<!--       y = "Total Burglaries per Municipality", -->
-<!--       caption = "Each observation is ONE municipality" -->
-<!--     ) + -->
-<!--     theme_minimal() + -->
-<!--     theme(axis.text.x = element_blank(), -->
-<!--           axis.ticks.x = element_blank()) -->
-
-<!-- # Boxplot of average burglaries per municipality -->
-<!--   ggplot(burglary_per_municipality, aes(y = Mean_Burglaries)) + -->
-<!--     geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", outlier.size   = 2) + -->
-<!--     labs( -->
-<!--       title = "Distribution of Average Annual Burglaries per Municipality", -->
-<!--       y = "Average Burglaries per Year", -->
-<!--       caption = "Each observation is ONE municipality" -->
-<!--     ) + -->
-<!--     theme_minimal() + -->
-<!--     theme(axis.text.x = element_blank(), -->
-<!--           axis.ticks.x = element_blank()) -->
-<!-- ``` -->
-
-
 ## Burglary Rates by Municipality
 
 ```{r echo = FALSE, fig.show='hold'}
@@ -518,7 +480,21 @@ ggplot() +
 
 # Chapter of Choice
 
-?shiny?
+## Interactive Web Application with Shiny
+
+As the Chapter of Choice, we developed an interactive web application using the `shiny` package — a framework for building browser-based applications directly from R, without requiring any knowledge of web development. The application serves as a companion to this report, but with a deliberately different emphasis: where the report focuses on a cross-sectional statistical analysis, the application prioritises **interactivity, geographic exploration, and the development of key variables over time**.
+
+### Motivation
+
+The datasets used in this analysis are well-suited to longitudinal exploration. Burglary data spans 2009 to 2024, income data reaches back to 1999, and all variables are available at a fine spatial resolution — individual municipalities and, for the city of Zurich, individual city districts. A static report cannot fully capture this temporal richness. An interactive application allows the reader to explore patterns at their own pace, select specific locations, and observe how income and burglary rates have evolved over 15 years.
+
+### Structure
+
+The application consists of two main tabs:
+
+**Map** — A choropleth map of Canton Zurich rendered with the `leaflet` package. The user can select any of four variables (median income, population, total burglaries, or burglary rate per 1,000 inhabitants), choose a year via a slider, and optionally exclude known outliers. Polygons are coloured using a continuous viridis palette, and hovering over a municipality displays the exact value. The map updates dynamically without reloading the page.
+
+**Data Explorer** — A municipality- and district-level panel showing four time-series plots side by side: population, median income, burglary trends (broken down by type), and burglary rate per 1,000 inhabitants. All locations in the canton are accessible via a dropdown. For municipalities that underwent administrative mergers between 2015 and 2019, the income plot additionally visualises the pre-merger constituent municipalities, making the data continuity transparent to the user.
 
 # Conclusions
 

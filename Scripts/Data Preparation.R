@@ -101,8 +101,6 @@ missing_coverage <- all_coverage %>%
   arrange(dataset, n_years) %>%
   select(dataset, Gemeindename, Gemeinde_BFS_Nr, n_years, missing_years, start_year = min_year, end_year = max_year)
 
-### Handling Missing Values
-
 # Define merger mapping
 merger_mapping <- tribble(
   ~old_BFS_Nr, ~new_BFS_Nr, ~merge_year,
@@ -314,7 +312,7 @@ ebd_per_gmd <- data %>%
   group_by(Gemeinde_BFS_Nr) %>% 
   mutate(Total_EBD = sum(Straftaten_total, na.rm = TRUE), 
          Einwohner_avg = mean(Einwohner, na.rm = TRUE),
-         EBD_pop_ratio = Total_EBD / Einwohner_avg) %>% 
+         EBD_pop_ratio = (Total_EBD / Einwohner_avg) * 1000) %>% 
   summarise(across(c(geom, Einwohner_avg, Total_EBD, EBD_pop_ratio), first),
   .groups = "drop") %>% 
   st_as_sf()
@@ -326,7 +324,7 @@ ggplot() +
           fill = NA, 
           color = "black", 
           size = 0.5) +
-  scale_fill_viridis_c(name = "EBD ratio per population") +
+  scale_fill_viridis_c(name = "Burglary Rate (per 1000 Inhabitants)") +
   coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
            ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
   theme_minimal() +
