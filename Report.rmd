@@ -1265,6 +1265,8 @@ The application consists of two main tabs:
 
 **Data Explorer** — A municipality- and district-level panel showing four time-series plots side by side: population, median income, burglary trends (broken down by type), and burglary rate per 1,000 inhabitants. All locations in the canton are accessible via a dropdown. For municipalities that underwent administrative mergers between 2015 and 2019, the income plot additionally visualises the pre-merger constituent municipalities, making the data continuity transparent to the user.
 
+[Link to shiny webapp](https://elenoar12-rbootcamp-holstein-thalathara.share.connect.posit.cloud/)
+
 # Conclusions
 
 ## Key Findings
