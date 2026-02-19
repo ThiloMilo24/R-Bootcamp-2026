@@ -1,6 +1,6 @@
 ---
 title: "Income, Crime, and Borders in Canton Zurich"
-author: "Thilo Holstein, Hans Josef Thalathara"
+author: "Thilo Holstein, Hans Joseph Thalathara"
 date: "2026-01-26"
 output:
   pdf_document:
@@ -69,21 +69,21 @@ Our analysis draws on five publicly available datasets from three different sour
 
 ## Burglary Data
 
-Burglary statistics by municipality and city district for Canton Zurich (2009--2024), published by the Canton of Zurich on the Open Data portal (data.zh.ch). The dataset contains approximately 15,000 records with variables including municipality identifiers, year, offence type, number of offences, population, and burglary rate per 1,000 inhabitants. Format: CSV.
+Burglary statistics by municipality and city district for Canton Zurich (2009--2024), published by the Canton of Zurich on the Open Data portal (opendata.swiss). The dataset contains approximately 15,000 records with variables including municipality identifiers, year, offence type, number of offences, population, and burglary rate per 1,000 inhabitants. Format: CSV.
 
 ## Income Data
 
 Two separate income datasets were used:
 
-- **Canton level:** Median taxable income by municipality (2009--2022), published by the Statistical Office of Canton Zurich (data.zh.ch). Format: CSV.
-- **City district level:** Median taxable income by city district for the city of Zurich (2009--2023), published by the City of Zurich (data.stadt-zuerich.ch). Format: CSV.
+- **Canton level:** Median taxable income by municipality (1999--2022), published by the Statistical Office of Canton Zurich (data.zh.ch). Format: CSV.
+- **City district level:** Median taxable income by city district for the city of Zurich (1999--2023), published by the City of Zurich (data.stadt-zuerich.ch). Format: CSV.
 
 The two datasets were joined at different spatial levels to achieve complete income coverage across both municipalities and city districts.
 
 ## Geographic Data
 
-- **Municipality boundaries:** GeoPackage of municipal boundaries for Canton Zurich (data.zh.ch), used for spatial visualisation and as join keys for the burglary and income data.
-- **City district boundaries:** GeoPackage of Zurich city district boundaries (data.stadt-zuerich.ch), providing geometries for the 12 Stadtkreise.
+- **Municipality boundaries:** GeoPackage of municipal boundaries for Canton Zurich (geo.zh.ch), used for spatial visualisation and as join keys for the burglary and income data.
+- **City district boundaries:** GeoPackage of Zurich city district boundaries (geo.zh.ch), providing geometries for the 12 Stadtkreise.
 - **Swiss national borders:** GeoPackage from swisstopo (swissBOUNDARIES3D), used to calculate each municipality's distance to the nearest national border.
 
 # Cleaning and Formatting the Dataset
@@ -371,15 +371,15 @@ income_kt <- income_kt %>%
   arrange(BFS_NR, INDIKATOR_JAHR)
 ```
 
-## Investigating Missing Values
+<!-- ## Investigating Missing Values -->
 
-After joining the datasets, 353 of 2,735 observations (12.9%) have missing values in the income variable (`INCOME_VALUE`). These missing values arise from three distinct causes:
+<!-- After joining the datasets, 353 of 2,735 observations (12.9%) have missing values in the income variable (`INCOME_VALUE`). These missing values arise from three distinct causes: -->
 
-- **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset.
-- **2024 (171 missing):** No income data are available for any municipality or city district.
-- **2009--2014 (24 missing):** Four municipalities (Stammheim, Wädenswil, Elgg, and Horgen) lack income records prior to 2015, likely due to later inclusion in the cantonal statistics.
+<!-- - **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset. -->
+<!-- - **2024 (171 missing):** No income data are available for any municipality or city district. -->
+<!-- - **2009--2014 (24 missing):** Four municipalities (Stammheim, Wädenswil, Elgg, and Horgen) lack income records prior to 2015, likely due to later inclusion in the cantonal statistics. -->
 
-All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied.
+<!-- All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied. -->
 
 We retain the full dataset for descriptive and spatial analyses (maps, time series, distributions), where income is not required. For all analyses involving income as a variable -- including the correlation matrix, scatterplots, and regression models -- observations with missing income values are excluded. This approach maximises the use of available data while ensuring that statistical models are estimated on complete cases only.
 
@@ -457,7 +457,7 @@ ebd_per_gmd <- data %>%
   group_by(Gemeinde_BFS_Nr) %>% 
   mutate(Total_EBD = sum(Straftaten_total, na.rm = TRUE), 
          Einwohner_avg = mean(Einwohner, na.rm = TRUE),
-         EBD_pop_ratio = Total_EBD / Einwohner_avg) %>% 
+         EBD_pop_ratio = (Straftaten_total / Einwohner) * 1000) %>% 
   summarise(across(c(geom, Einwohner_avg, Total_EBD, EBD_pop_ratio), first),
   .groups = "drop") %>% 
   st_as_sf()
@@ -469,7 +469,7 @@ ggplot() +
           fill = NA, 
           color = "black", 
           size = 0.5) +
-  scale_fill_viridis_c(name = "EBD ratio per population") +
+  scale_fill_viridis_c(name = "Burglary Rate (per 1000 Inhabitants)") +
   coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
            ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
   theme_minimal() +
@@ -486,7 +486,7 @@ ggplot() +
           fill = NA, 
           color = "black", 
           size = 0.5) +
-  scale_fill_viridis_c(name = "EBD ratio per population") +
+  scale_fill_viridis_c(name = "Burglary Rate (per 1000 Inhabitants)") +
   coord_sf(xlim = c(bbox["xmin"] - padding, bbox["xmax"] + padding), 
            ylim = c(bbox["ymin"] - padding, bbox["ymax"] + padding)) +
   theme_minimal() +
@@ -1248,6 +1248,22 @@ if (int_p < 0.05) {
 ```
 
 # Chapter of Choice
+
+## Interactive Web Application with Shiny
+
+As the Chapter of Choice, we developed an interactive web application using the `shiny` package — a framework for building browser-based applications directly from R, without requiring any knowledge of web development. The application serves as a companion to this report, but with a deliberately different emphasis: where the report focuses on a cross-sectional statistical analysis, the application prioritises **interactivity, geographic exploration, and the development of key variables over time**.
+
+### Motivation
+
+The datasets used in this analysis are well-suited to longitudinal exploration. Burglary data spans 2009 to 2024, income data reaches back to 1999, and all variables are available at a fine spatial resolution — individual municipalities and, for the city of Zurich, individual city districts. A static report cannot fully capture this temporal richness. An interactive application allows the reader to explore patterns at their own pace, select specific locations, and observe how income and burglary rates have evolved over 15 years.
+
+### Structure
+
+The application consists of two main tabs:
+
+**Map** — A choropleth map of Canton Zurich rendered with the `leaflet` package. The user can select any of four variables (median income, population, total burglaries, or burglary rate per 1,000 inhabitants), choose a year via a slider, and optionally exclude known outliers. Polygons are coloured using a continuous viridis palette, and hovering over a municipality displays the exact value. The map updates dynamically without reloading the page.
+
+**Data Explorer** — A municipality- and district-level panel showing four time-series plots side by side: population, median income, burglary trends (broken down by type), and burglary rate per 1,000 inhabitants. All locations in the canton are accessible via a dropdown. For municipalities that underwent administrative mergers between 2015 and 2019, the income plot additionally visualises the pre-merger constituent municipalities, making the data continuity transparent to the user.
 
 # Conclusions
 
