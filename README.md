@@ -21,9 +21,9 @@ This project investigates whether anecdotal observations from Basel-Landschaft -
 | Dataset | Source | Format |
 |---|---|---|
 | Burglary statistics (2009--2024) | Canton Zurich (opendata.swiss) | CSV |
-| Median income by municipality (1999--2022) | Canton Zurich (opendata.swiss) | CSV |
+| Median income by municipality (1999--2022) | Canton Zurich (data.zh.ch) | CSV |
 | Median income by city district (2009--2022) | City of Zurich (data.stadt-zuerich.ch) | CSV |
-| Municipality boundaries | Canton Zurich (opendata.swiss) | GeoPackage |
+| Municipality and city district boundaries | Canton Zurich (geo.zh.ch) | GeoPackage |
 | Swiss national borders | swisstopo | GeoPackage |
 
 ## Project Structure
