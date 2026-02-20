@@ -1280,8 +1280,6 @@ Several limitations should be considered when interpreting these results.
 
 **Single canton.** The analysis is restricted to Canton Zurich. The patterns observed here may not generalise to other cantons, particularly those with different border configurations (e.g., Basel-Landschaft, Geneva, or Ticino) or different economic structures.
 
-\newpage
-
 # Generative AI Reflection
 
 AI proved to be a powerful tool that definitely supported us in crafting this project. While it was important to us to understand the concepts of R and exciting to dive into the statistics and explore what stories the data could tell, we used available tools such as ChatGPT and Claude to debug code, improve syntax and writing, and broaden our understanding of what we might research with the given data. In all cases, we tried to validate outputs against course materials rather than accepting them uncritically.

@@ -486,7 +486,7 @@ ui <- fluidPage(
                       h3("Research Question"),
                       p("How does income level and proximity to Switzerland's national borders relate to burglary
                         rates across municipalities in Canton Zurich?"),
-
+                      
                       h3("Hypotheses"),
                       p("The analysis was motivated by anecdotal observations from the Canton of Basel-Landschaft,
                         where burglaries appeared to occur more frequently in wealthier municipalities near the
@@ -496,7 +496,9 @@ ui <- fluidPage(
                                 burglary rates, as wealthier areas may present more attractive targets."),
                         tags$li(strong("H2 — Border proximity:"), "Municipalities located closer to national borders
                                 experience higher burglary rates, potentially due to easier escape routes across
-                                international boundaries.")
+                                international boundaries."),
+                        tags$li(strong("H3 — Combined effect:"), "Income and border proximity jointly predict
+                                burglary rates better than either variable alone.")
                       ),
 
                       h3("Notable Features"),
