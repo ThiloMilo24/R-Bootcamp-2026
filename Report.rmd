@@ -1,6 +1,6 @@
 ---
 title: "Income, Crime, and Borders in Canton Zurich"
-author: "Thilo Holstein, Hans Josef Thalathara"
+author: "Thilo Holstein, Hans Joseph Thalathara"
 date: "2026-01-26"
 output:
   pdf_document:
@@ -24,6 +24,7 @@ library(ggplot2)
 library(tidyr)
 library(scales)
 library(gridExtra)
+library(knitr)
 library(kableExtra)
 
 source("Scripts/Data Preparation.R")
@@ -70,21 +71,21 @@ Our analysis draws on five publicly available datasets from three different sour
 
 ## Burglary Data
 
-Burglary statistics by municipality and city district for Canton Zurich (2009--2024), published by the Canton of Zurich on the Open Data portal (data.zh.ch). The dataset contains approximately 15,000 records with variables including municipality identifiers, year, offence type, number of offences, population, and burglary rate per 1,000 inhabitants. Format: CSV.
+Burglary statistics by municipality and city district for Canton Zurich (2009--2024), published by the Canton of Zurich on the Open Data portal (opendata.swiss). The dataset contains approximately 15,000 records with variables including municipality identifiers, year, offence type, number of offences, population, and burglary rate per 1,000 inhabitants. Format: CSV.
 
 ## Income Data
 
 Two separate income datasets were used:
 
-- **Canton level:** Median taxable income by municipality (2009--2022), published by the Statistical Office of Canton Zurich (data.zh.ch). Format: CSV.
-- **City district level:** Median taxable income by city district for the city of Zurich (2009--2023), published by the City of Zurich (data.stadt-zuerich.ch). Format: CSV.
+- **Canton level:** Median taxable income by municipality (1999--2022), published by the Statistical Office of Canton Zurich (data.zh.ch). Format: CSV.
+- **City district level:** Median taxable income by city district for the city of Zurich (1999--2023), published by the City of Zurich (data.stadt-zuerich.ch). Format: CSV.
 
 The two datasets were joined at different spatial levels to achieve complete income coverage across both municipalities and city districts.
 
 ## Geographic Data
 
-- **Municipality boundaries:** GeoPackage of municipal boundaries for Canton Zurich (data.zh.ch), used for spatial visualisation and as join keys for the burglary and income data.
-- **City district boundaries:** GeoPackage of Zurich city district boundaries (data.stadt-zuerich.ch), providing geometries for the 12 Stadtkreise.
+- **Municipality boundaries:** GeoPackage of municipal boundaries for Canton Zurich (geo.zh.ch), used for spatial visualisation and as join keys for the burglary and income data.
+- **City district boundaries:** GeoPackage of Zurich city district boundaries (geo.zh.ch), providing geometries for the 12 Stadtkreise.
 - **Swiss national borders:** GeoPackage from swisstopo (swissBOUNDARIES3D), used to calculate each municipality's distance to the nearest national border.
 
 
@@ -268,11 +269,9 @@ p1 <- ggplot(all_coverage, aes(x = dataset, y = n_years, fill = dataset)) +
 print(p1)
 ```
 
-The datasets employed in this analysis vary in their temporal completeness across the observation period from 1999 to 2024. Among the three primary data sources, only the income data for city districts (Stadt Zurich) provide complete coverage for all geographic units across the entire timeframe, with no missing observations.
+The datasets employed in this analysis vary in their temporal completeness across the observation period from 1999 to 2023. Among the three primary data sources, only the income data for city districts (Stadt Zurich) provide complete coverage for all geographic units across the entire timeframe, with no missing observations.
 The burglary dataset exhibits minimal missingness, with one municipality showing absent data for reasons that could not be determined from the available documentation. The limited scope of this gap suggests negligible impact on the overall analysis.
 Income data at the cantonal level (municipal aggregation) demonstrate more substantial incompleteness, with several municipalities missing data for specific years. Table 1 provides a detailed breakdown of missing observations by municipality and year, allowing for transparent assessment of potential limitations in temporal coverage.
-
-\newpage
 
 ```{r echo = FALSE, results = 'asis'}
 all_coverage %>%
@@ -290,10 +289,11 @@ all_coverage %>%
 
 Further investigation revealed that the missing income data were not random but rather systematic, arising from administrative boundary changes. Between 2015 and 2019, several municipalities in Canton Zurich underwent mergers, resulting in the creation of new administrative units with updated BFS (Federal Statistical Office) identifiers. Specifically:
 
-- On 1 January 2019, the former municipalities of Ober-, Unterstammheim, and Waltalingen merged to form the new municipality of Stammheim - On 1 January 2019, the former municipalities of Hütten and Schönenberg merged into the municipality of Wädenswil  
-- On 1 January 2018, the former municipality of Hofstetten merged into the municipality of Elgg  
-- On 1 January 2018, the former municipality of Hirzel merged into the municipality of Horgen  
-- On 1 January 2016, Kyburg and Illnau-Effretikon merged to form the municipality of Illnau-Effretikon  
+On 1 January 2019, the former municipalities of Ober-, Unterstammheim, and Waltalingen merged to form the new municipality of Stammheim  
+On 1 January 2019, the former municipalities of Hütten and Schönenberg merged into the municipality of Wädenswil  
+On 1 January 2018, the former municipality of Hofstetten merged into the municipality of Elgg  
+On 1 January 2018, the former municipality of Hirzel merged into the municipality of Horgen  
+On 1 January 2016, Kyburg and Illnau-Effretikon merged to form the municipality of Illnau-Effretikon  
 
 These mergers resulted in discontinued BFS identifiers for the former municipalities, with new identifiers assigned to the merged entities. Consequently, income data appeared "missing" for the merged municipalities in pre-merger years, as these records remained associated with the former municipal identifiers.
 To address this issue, we implemented a systematic reconciliation procedure. For each merged municipality, we first assessed the completeness of income data under the new identifier. Where gaps existed for pre-merger years, we reconstructed the median income values by averaging data from the constituent former municipalities. This approach ensured temporal continuity in the income variable while maintaining geographic consistency with the current administrative boundaries used in the burglary and spatial datasets.
@@ -375,12 +375,15 @@ income_kt <- income_kt %>%
   arrange(BFS_NR, INDIKATOR_JAHR)
 ```
 
-After the merger reconciliation and joining all datasets, 329 of 2,735 observations (12.0%) retain missing values in the income variable. These arise from two remaining causes:
+<!-- ## Investigating Missing Values -->
 
-- **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset.
-- **2024 (171 missing):** No income data are available for any municipality or city district.
+<!-- After joining the datasets, 353 of 2,735 observations (12.9%) have missing values in the income variable (`INCOME_VALUE`). These missing values arise from three distinct causes: -->
 
-All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied.
+<!-- - **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset. -->
+<!-- - **2024 (171 missing):** No income data are available for any municipality or city district. -->
+<!-- - **2009--2014 (24 missing):** Four municipalities (Stammheim, Wädenswil, Elgg, and Horgen) lack income records prior to 2015, likely due to later inclusion in the cantonal statistics. -->
+
+<!-- All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied. -->
 
 We retain the full dataset for descriptive and spatial analyses (maps, time series, distributions), where income is not required. For all analyses involving income as a variable -- including the correlation matrix, scatterplots, and regression models -- observations with missing income values are excluded. This approach maximises the use of available data while ensuring that statistical models are estimated on complete cases only.
 
