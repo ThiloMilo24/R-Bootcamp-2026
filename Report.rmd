@@ -106,7 +106,7 @@ Prior to spatial analysis, all municipality geometries were transformed to a com
 
 City district geometries for the city of Zurich were processed separately. Because the original dataset contained curved polygon geometries, the data were converted into standard multipolygon geometries using GDAL utilities. The converted geometries were subsequently imported, restricted to district identifiers and geometries, and transformed to the same coordinate reference system as the Swiss border data. Centroids were calculated for each city district, and distances to the Swiss national border were computed analogously to the municipality-level analysis, again expressed in both meters and kilometers.
 
-```{r echo = FALSE, include = FALSE}
+```{r load-data, echo = FALSE, include = FALSE}
 ## Burglary data canton ZH
 ktzh_ebd <- read.csv("Data/KTZH_EBD.csv")
 
@@ -193,7 +193,7 @@ stzh_geom <- stzh_gpkg %>%
 
 ## Investigating Missing Values
 
-```{r echo = FALSE}
+```{r missing-values, echo = FALSE}
 # 1. EBD dataset - check data availability by municipality
 ebd_years <- unique(ebd$Ausgangsjahr)
 ebd_year_range <- range(ebd_years)
@@ -273,9 +273,7 @@ The datasets employed in this analysis vary in their temporal completeness acros
 The burglary dataset exhibits minimal missingness, with one municipality showing absent data for reasons that could not be determined from the available documentation. The limited scope of this gap suggests negligible impact on the overall analysis.
 Income data at the cantonal level (municipal aggregation) demonstrate more substantial incompleteness, with several municipalities missing data for specific years. Table 1 provides a detailed breakdown of missing observations by municipality and year, allowing for transparent assessment of potential limitations in temporal coverage.
 
-\newpage
-
-```{r echo = FALSE, results = 'asis'}
+```{r coverage-table, echo = FALSE, results = 'asis'}
 all_coverage %>%
   filter(missing_years > 0) %>%
   arrange(dataset, n_years) %>%
@@ -300,7 +298,7 @@ Further investigation revealed that the missing income data were not random but 
 These mergers resulted in discontinued BFS identifiers for the former municipalities, with new identifiers assigned to the merged entities. Consequently, income data appeared "missing" for the merged municipalities in pre-merger years, as these records remained associated with the former municipal identifiers.
 To address this issue, we implemented a systematic reconciliation procedure. For each merged municipality, we first assessed the completeness of income data under the new identifier. Where gaps existed for pre-merger years, we reconstructed the median income values by averaging data from the constituent former municipalities. This approach ensured temporal continuity in the income variable while maintaining geographic consistency with the current administrative boundaries used in the burglary and spatial datasets.
 
-```{r echo = FALSE, include = FALSE}
+```{r handling-na, echo = FALSE, include = FALSE}
 # Define merger mapping
 merger_mapping <- tribble(
   ~old_BFS_Nr, ~new_BFS_Nr, ~merge_year,
@@ -377,6 +375,8 @@ income_kt <- income_kt %>%
   arrange(BFS_NR, INDIKATOR_JAHR)
 ```
 
+\newpage
+
 After the merger reconciliation above, 329 of 2,735 observations (12.0%) still have missing values in the income variable (`INCOME_VALUE`). These remaining gaps arise from two causes:
 
 - **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset.
@@ -386,9 +386,7 @@ All other variables -- burglary counts, population, burglary rates, and border d
 
 We retain the full dataset for descriptive and spatial analyses (maps, time series, distributions), where income is not required. For all analyses involving income as a variable -- including the correlation matrix, scatterplots, and regression models -- observations with missing income values are excluded. This approach maximises the use of available data while ensuring that statistical models are estimated on complete cases only.
 
-
-
-```{r include = TRUE}
+```{r merging-datasets, include = TRUE}
 # Merge data sets
 data <- ebd %>% 
   left_join(income_kt, 
@@ -436,6 +434,8 @@ data <- data %>%
                                    Gemeinde_BFS_Nr))
 ```
 
+\newpage
+
 # Exploratory Data Analysis
 
 Before testing our hypotheses through formal modelling, we explore the data visually. This section begins with a spatial overview of burglary patterns across the canton, then follows a narrative from the macro level (canton-wide trends over time) down to the micro level (individual municipality patterns), building an increasingly detailed picture of how income, burglaries, and geography interact across Canton Zurich.
@@ -444,7 +444,7 @@ Before testing our hypotheses through formal modelling, we explore the data visu
 
 The following maps show the total number of burglaries per municipality, normalised by average population, across the full observation period. This provides a first visual impression of how burglary risk is distributed geographically.
 
-```{r echo = FALSE, fig.show='hold'}
+```{r ebd-rate-map, echo = FALSE, fig.show='hold'}
 # City outline for map
 # Create the outer boundary of Zurich city
 city_outline <- data %>%
@@ -481,7 +481,7 @@ ggplot() +
 
 The city district Kreis 1 seems to be a strong outlier in the data. To have a more balanced output of the burglary rate per municipality and population, this is how the map of the canton of Zurich looks without the outlier:
 
-```{r echo = FALSE}
+```{r map-without-Kreis-1, echo = FALSE}
 ggplot() +
   geom_sf(data = swiss_borders, fill = NA, color = "black", linewidth = 1) +
   geom_sf(data = ebd_per_gmd %>% filter(Gemeinde_BFS_Nr != 2610001), aes(fill = EBD_pop_ratio), color = "white", linewidth = 0.3) +
@@ -554,6 +554,8 @@ knitr::kable(
   caption = "Summary statistics for key variables"
 )
 ```
+
+\newpage
 
 The distributions of our key variables reveal important characteristics of the data:
 
@@ -1242,7 +1244,7 @@ The application consists of two main tabs:
 
 **Data Explorer** — A municipality- and district-level panel showing four time-series plots side by side: population, median income, burglary trends (broken down by type), and burglary rate per 1,000 inhabitants. All locations in the canton are accessible via a dropdown. For municipalities that underwent administrative mergers between 2015 and 2019, the income plot additionally visualises the pre-merger constituent municipalities, making the data continuity transparent to the user.
 
-[Link to shiny webapp](https://elenoar12-rbootcamp-holstein-thalathara.share.connect.posit.cloud/)
+[--> Link to Shiny Webapp](https://elenoar12-rbootcamp-holstein-thalathara.share.connect.posit.cloud/)
 
 # Conclusions
 
@@ -1262,6 +1264,8 @@ This analysis set out to test whether anecdotal observations from Basel-Landscha
 
 Several limitations should be considered when interpreting these results.
 
+**Commercial area density and building-use composition.** Kreis 1 emerges as a clear outlier in burglary rates per 1,000 inhabitants. A likely contributing factor is its exceptionally high concentration of commercial properties. Particularly, high-value retail establishments may attract a qualitatively different type of burglary than residential break-ins. The burglary data used in this analysis does not distinguish between household and commercial premises, meaning that municipalities or districts with a high density of shops, offices, or other non-residential buildings cannot be meaningfully compared to predominantly residential areas on the basis of raw burglary rates alone. Incorporating a measure of commercial land-use density or building-use composition into the model would likely improve both its explanatory power and the interpretability of spatial patterns, particularly for urban centres such as Kreis 1.
+
 **Ecological fallacy.** All analyses operate at the municipal level. Even where visual patterns suggest spatial gradients (e.g., higher burglary rates near the border), we cannot draw conclusions about individual-level behaviour from aggregate data.
 
 **Limited model explanatory power.** While the Negative Binomial model is statistically appropriate for the data, the included covariates — income, border distance, and year — explain only a modest share of the variation in burglary counts. A formal goodness-of-fit measure such as McFadden's pseudo-R² would likely confirm that much of the municipality-level variation remains unexplained. This is consistent with the observation that important predictors are missing from the model.
@@ -1270,9 +1274,11 @@ Several limitations should be considered when interpreting these results.
 
 **Centroid distance as a proxy.** Border distance is measured from each municipality's geographic centroid to the nearest national border. This is a simplification — municipalities with irregular shapes or large areas may have actual border distances that differ substantially from the centroid measure. A more granular measure (e.g., minimum distance from any point within the municipality boundary) might yield different results.
 
-**Incomplete income data.** Income data are unavailable for 2023–2024 and for four municipalities prior to 2015, limiting the temporal scope of income-related analyses to 2009–2022. While the missingness mechanism is well understood and documented in Section 3.2, it means our models cannot capture the most recent developments.
+**Incomplete income data.** Income data are unavailable for 2023–2024, limiting the temporal scope of income-related analyses to 2009–2022. While the missingness mechanism is well understood and documented in Section 3.2, it means our models cannot capture the most recent developments.
 
 **Single canton.** The analysis is restricted to Canton Zurich. The patterns observed here may not generalise to other cantons, particularly those with different border configurations (e.g., Basel-Landschaft, Geneva, or Ticino) or different economic structures.
+
+\newpage
 
 # Generative AI Reflection
 
