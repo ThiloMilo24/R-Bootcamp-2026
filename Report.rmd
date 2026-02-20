@@ -375,15 +375,12 @@ income_kt <- income_kt %>%
   arrange(BFS_NR, INDIKATOR_JAHR)
 ```
 
-<!-- ## Investigating Missing Values -->
+After the merger reconciliation above, 329 of 2,735 observations (12.0%) still have missing values in the income variable (`INCOME_VALUE`). These remaining gaps arise from two causes:
 
-<!-- After joining the datasets, 353 of 2,735 observations (12.9%) have missing values in the income variable (`INCOME_VALUE`). These missing values arise from three distinct causes: -->
+- **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset.
+- **2024 (171 missing):** No income data are available for any municipality or city district.
 
-<!-- - **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset. -->
-<!-- - **2024 (171 missing):** No income data are available for any municipality or city district. -->
-<!-- - **2009--2014 (24 missing):** Four municipalities (Stammheim, Wädenswil, Elgg, and Horgen) lack income records prior to 2015, likely due to later inclusion in the cantonal statistics. -->
-
-<!-- All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied. -->
+All other variables -- burglary counts, population, burglary rates, and border distance -- are complete across the entire observation period. Since the missingness is entirely explained by data availability rather than by any systematic relationship with the outcome variable, the missing-at-random assumption is satisfied.
 
 We retain the full dataset for descriptive and spatial analyses (maps, time series, distributions), where income is not required. For all analyses involving income as a variable -- including the correlation matrix, scatterplots, and regression models -- observations with missing income values are excluded. This approach maximises the use of available data while ensuring that statistical models are estimated on complete cases only.
 
@@ -1054,7 +1051,7 @@ knitr::kable(int_table, row.names = FALSE)
 
 The interaction term (Income × Border Distance) is statistically significant (p = `r formatC(int_coefs["income_10k:distance_to_border_km", "Pr(>|z|)"], format = "e", digits = 2)`), and notably, including it renders both main effects significant as well — a pattern that was absent in the additive NB model. This suggests that the relationship between income and burglary rates is modulated by geographic proximity to the border.
 
-However, interpreting this result requires caution. The significant interaction indicates a statistical dependency between income and border distance, but the practical relevance is limited. The positive interaction coefficient (+`r round(int_coefs["income_10k:distance_to_border_km", "Estimate"], 4)`) implies that the negative income effect weakens as distance to the border increases — in other words, the protective association of higher income diminishes further from the border. Yet the AIC improvement over the additive NB model is marginal (`r round(AIC(nb_interaction), 1)` vs. `r round(AIC(nb_full), 1)`), suggesting that the interaction, while statistically detectable, adds only modest explanatory power. Given the large sample size (n = `r format(nobs(nb_interaction), big.mark = ",")` complete observations), even small effects can reach significance without being substantively meaningful. We therefore interpret H3 with caution: there is evidence of a statistical interaction, but it does not substantially improve prediction of burglary rates.
+However, interpreting this result requires caution. The significant interaction indicates a statistical dependency between income and border distance, but the practical relevance is limited. The positive interaction coefficient (+`r round(int_coefs["income_10k:distance_to_border_km", "Estimate"], 4)`) implies that the negative income effect weakens as distance to the border increases — in other words, the protective association of higher income diminishes further from the border. Yet the AIC improvement over the additive NB model is marginal (`r format(round(AIC(nb_interaction), 1), big.mark = ",")` vs. `r format(round(AIC(nb_full), 1), big.mark = ",")`), suggesting that the interaction, while statistically detectable, adds only modest explanatory power. Given the large sample size (n = `r format(nobs(nb_interaction), big.mark = ",")` complete observations), even small effects can reach significance without being substantively meaningful. We therefore interpret H3 with caution: there is evidence of a statistical interaction, but it does not substantially improve prediction of burglary rates.
 
 ## Model Comparison: Poisson vs. Negative Binomial
 
