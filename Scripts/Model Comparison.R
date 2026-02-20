@@ -28,7 +28,7 @@ model_data <- data %>%
   )
 
 # ---------------------------------------------------------------------------
-# 2. Fit both full models
+# 2. Fit all models
 # ---------------------------------------------------------------------------
 poisson_full <- glm(
   Straftaten_total ~ income_10k + distance_to_border_km + year_centered +
@@ -39,6 +39,12 @@ poisson_full <- glm(
 
 nb_full <- glm.nb(
   Straftaten_total ~ income_10k + distance_to_border_km + year_centered +
+    offset(log_pop),
+  data = model_data
+)
+
+nb_interaction <- glm.nb(
+  Straftaten_total ~ income_10k * distance_to_border_km + year_centered +
     offset(log_pop),
   data = model_data
 )
@@ -64,9 +70,11 @@ cat("  Conclusion:", ifelse(lr_pval < 0.05,
 # 4. AIC Comparison
 # ---------------------------------------------------------------------------
 aic_comparison <- data.frame(
-  Model = c("Poisson", "Negative Binomial"),
-  AIC = c(AIC(poisson_full), AIC(nb_full)),
-  LogLik = c(as.numeric(logLik(poisson_full)), as.numeric(logLik(nb_full)))
+  Model = c("Poisson (full)", "Negative Binomial (full)", "NB with interaction"),
+  AIC = round(c(AIC(poisson_full), AIC(nb_full), AIC(nb_interaction)), 1),
+  LogLik = round(c(as.numeric(logLik(poisson_full)),
+                    as.numeric(logLik(nb_full)),
+                    as.numeric(logLik(nb_interaction))), 1)
 )
 
 cat("=== AIC Comparison ===\n")
@@ -96,7 +104,36 @@ cat("This is misleading — it overestimates precision because it ignores\n")
 cat("overdispersion. The NB standard errors are more honest.\n\n")
 
 # ---------------------------------------------------------------------------
-# 6. Visual: Observed vs. Predicted
+# 6. Visual: Coefficient Comparison (Poisson vs. NB)
+# ---------------------------------------------------------------------------
+vars <- c("income_10k", "distance_to_border_km", "year_centered")
+var_labels <- c("Income (10k CHF)", "Distance to Border (km)", "Year")
+
+comp_data <- data.frame(
+  Variable = rep(var_labels, 2),
+  Model = rep(c("Poisson", "Negative Binomial"), each = 3),
+  Estimate = c(poisson_coefs[vars, "Estimate"], nb_coefs[vars, "Estimate"]),
+  SE = c(poisson_coefs[vars, "Std. Error"], nb_coefs[vars, "Std. Error"])
+)
+
+ggplot(comp_data, aes(x = Variable, y = Estimate, color = Model)) +
+  geom_point(position = position_dodge(width = 0.5), size = 3) +
+  geom_errorbar(aes(ymin = Estimate - 1.96 * SE, ymax = Estimate + 1.96 * SE),
+                position = position_dodge(width = 0.5), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = c("Poisson" = "#d95f02", "Negative Binomial" = "#2c7fb8")) +
+  coord_flip() +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Coefficient Estimates: Poisson vs. Negative Binomial",
+    subtitle = "Error bars = 95% confidence intervals",
+    x = NULL,
+    y = "Coefficient Estimate",
+    color = NULL
+  )
+
+# ---------------------------------------------------------------------------
+# 7. Visual: Observed vs. Predicted
 # ---------------------------------------------------------------------------
 model_data <- model_data %>%
   mutate(
@@ -119,6 +156,7 @@ ggplot(pred_long, aes(x = predicted, y = Straftaten_total, color = model)) +
   scale_x_log10() +
   scale_y_log10() +
   facet_wrap(~ model) +
+  scale_color_manual(values = c("Poisson" = "#d95f02", "Negative Binomial" = "#2c7fb8")) +
   theme_minimal(base_size = 13) +
   labs(
     title = "Observed vs. Predicted Burglary Counts",
@@ -129,7 +167,7 @@ ggplot(pred_long, aes(x = predicted, y = Straftaten_total, color = model)) +
   theme(legend.position = "none")
 
 # ---------------------------------------------------------------------------
-# 7. Rootogram: Distribution of Residuals
+# 8. Rootogram: Distribution of Residuals
 # ---------------------------------------------------------------------------
 # Pearson residuals: (observed - expected) / sqrt(variance)
 # For a well-fitting model, these should be roughly standard normal.
@@ -158,13 +196,13 @@ ggplot(resid_long, aes(x = residual)) +
   theme_minimal(base_size = 13) +
   labs(
     title = "Distribution of Pearson Residuals",
-    subtitle = "Orange curve = standard normal (expected for good fit)",
+    subtitle = "Orange curve = standard normal (expected for a well-fitting model)",
     x = "Pearson Residual",
     y = "Density"
   )
 
 # ---------------------------------------------------------------------------
-# 8. Summary Statistics
+# 9. Summary Statistics
 # ---------------------------------------------------------------------------
 cat("=== Residual Summary ===\n")
 cat("Poisson — Mean:", round(mean(model_data$resid_poisson), 3),
