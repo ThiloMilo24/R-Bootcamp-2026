@@ -1,21 +1,62 @@
 # R-Bootcamp-2026
-This repository explores how income levels relate to both crime (burglaries) and traffic accidents across municipalities in Canton Zurich, and whether there is an underlying relationship between crime and accident rates themselves.
+
+**Income, Crime, and Borders in Canton Zurich**
+
+HSLU R Bootcamp group assignment by Thilo Holstein and Hans Josef Thalathara.
+
+This project investigates whether anecdotal observations from Basel-Landschaft -- that burglaries concentrate in wealthier, border-proximate municipalities -- hold in the Canton of Zurich. We combine burglary statistics, income data, and geographic boundary data at the municipal level and test these assumptions using exploratory visualisation and formal count regression models (Poisson and Negative Binomial).
 
 ## Research Question
-How does income level relate to both crime (burglaries) and traffic accidents across municipalities in Canton Zurich, and is there an underlying relationship between crime and accident rates themselves?
 
-## Approach
-We analyse open data from Canton Zurich to investigate a triangular relationship between income, burglaries, and traffic accidents at the municipal level. By joining multiple datasets, we examine whether income predicts crime and accident rates independently, and whether crime and accidents share a connection beyond what income alone explains.
+> How does income level relate to burglary rates across municipalities in Canton Zurich, and does proximity to the national border act as an independent predictor of crime?
 
 ## Hypotheses
-### H1 – Income and Burglaries
-Municipalities with higher average income exhibit higher burglary rates, as wealthier areas may present more attractive targets.
-### H2 – Income and Accidents
-Municipalities with higher average income exhibit lower traffic accident rates, potentially due to better infrastructure, less transit traffic, or newer vehicles.
-### H3 – Burglaries and Accidents
-Burglary rates and traffic accident rates are positively correlated across municipalities, independent of income. Both may reflect underlying factors such as population density or urbanization.
+
+- **H1 -- Income and Burglaries:** Municipalities with higher median income exhibit higher burglary rates, as wealthier areas may present more attractive targets.
+- **H2 -- Border Proximity and Burglaries:** Municipalities closer to national borders experience higher burglary rates due to proximity to cross-border escape routes.
+- **H3 -- Combined Effect:** Income and border proximity jointly predict burglary rates better than either variable alone.
 
 ## Data Sources
-Average taxable income by municipality (Canton Zurich)
-Police-registered traffic accidents (Canton Zurich)
-Burglary statistics by municipality (Canton Zurich)
+
+| Dataset | Source | Format |
+|---|---|---|
+| Burglary statistics (2009--2024) | Canton Zurich (opendata.swiss) | CSV |
+| Median income by municipality (1999--2022) | Canton Zurich (opendata.swiss) | CSV |
+| Median income by city district (2009--2022) | City of Zurich (data.stadt-zuerich.ch) | CSV |
+| Municipality boundaries | Canton Zurich (opendata.swiss) | GeoPackage |
+| Swiss national borders | swisstopo | GeoPackage |
+
+## Project Structure
+
+```
+R-Bootcamp-2026/
+├── Report.rmd                          # Main report (R Markdown)
+├── Report.pdf                          # Rendered PDF output
+├── Scripts/
+│   ├── Data Preparation.R              # Data loading, cleaning, merging, merger reconciliation
+│   ├── EDA Descriptive.R               # Descriptive statistics and distributions
+│   ├── EDA Timeline.R                  # Temporal trends (income and burglary over time)
+│   ├── EDA Regression.R                # Scatterplots with regression lines (H1, H2)
+│   ├── EDA Municipalities.R            # Municipality timelines and income-crime clusters
+│   ├── Regression Poisson.R            # Poisson count regression models
+│   ├── Regression NegBin.R             # Negative Binomial models + IRR
+│   └── Model Comparison.R             # Poisson vs. NB comparison (LR test, AIC, residuals)
+├── App/
+│   └── app.R                           # Interactive Shiny web application (Chapter of Choice)
+├── Data/                               # All source datasets (CSV + GeoPackage)
+└── R-Bootcamp-2026.Rproj              # RStudio project file
+```
+
+## How to Reproduce
+
+1. Open `R-Bootcamp-2026.Rproj` in RStudio.
+2. Ensure the required packages are installed: `readr`, `dplyr`, `MASS`, `sf`, `ggplot2`, `tidyr`, `scales`, `gridExtra`, `kableExtra`.
+3. Knit `Report.rmd` to PDF (uses `xelatex` engine).
+4. Individual analysis scripts in `Scripts/` can be run standalone after running `Data Preparation.R`.
+
+## Key Findings
+
+- **H1 rejected (direction reversed):** Wealthier municipalities show *lower* burglary rates.
+- **H2 not supported:** Border distance is not statistically significant in the NB model (p > 0.05), despite a visually compelling spatial gradient in the EDA.
+- **H3 partially supported:** The income-border interaction is statistically significant but adds only modest explanatory power.
+- **Strongest predictor:** Year -- burglary rates have declined substantially across all municipalities since 2009.
