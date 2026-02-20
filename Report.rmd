@@ -29,6 +29,8 @@ library(kableExtra)
 
 source("Scripts/Data Preparation.R")
 ```
+  
+\newpage
 
 # Introduction
 
@@ -85,6 +87,8 @@ The two datasets were joined at different spatial levels to achieve complete inc
 - **Municipality boundaries:** GeoPackage of municipal boundaries for Canton Zurich (geo.zh.ch), used for spatial visualisation and as join keys for the burglary and income data.
 - **City district boundaries:** GeoPackage of Zurich city district boundaries (geo.zh.ch), providing geometries for the 12 Stadtkreise.
 - **Swiss national borders:** GeoPackage from swisstopo (swissBOUNDARIES3D), used to calculate each municipality's distance to the nearest national border.
+
+
 
 # Cleaning and Formatting the Dataset
 
@@ -383,7 +387,7 @@ income_kt <- income_kt %>%
 
 We retain the full dataset for descriptive and spatial analyses (maps, time series, distributions), where income is not required. For all analyses involving income as a variable -- including the correlation matrix, scatterplots, and regression models -- observations with missing income values are excluded. This approach maximises the use of available data while ensuring that statistical models are estimated on complete cases only.
 
-## Joining the Datasets
+
 
 ```{r include = TRUE}
 # Merge data sets
@@ -627,6 +631,8 @@ ggplot(cor_long, aes(x = Var1, y = Var2, fill = Correlation)) +
 
 The correlation matrix provides a first hint at the relationships we will explore in detail. Raw burglary counts correlate strongly with population — unsurprisingly, since larger municipalities have more of everything. This is precisely why we use the burglary *rate* (or count models with a population offset) rather than raw counts in our analysis. The correlations between burglary rate, income, and border distance are the ones relevant to our hypotheses and will be examined in the following sections.
 
+\newpage
+
 ## Temporal Trends: Income and Burglary Rates
 
 We begin by examining how burglary rates and median income have evolved across Canton Zurich over time. Since the two variables operate on fundamentally different scales, we normalise both to an index where the first available year equals 100. This allows direct comparison of their relative trajectories.
@@ -640,7 +646,9 @@ timeline_data <- data %>%
     income = mean(INCOME_VALUE, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  filter(!is.na(income))
+  filter(!is.na(income)) %>%
+  filter((Ausgangsjahr <= 2022))
+
 
 base_year <- min(timeline_data$Ausgangsjahr)
 base_vals <- timeline_data %>% filter(Ausgangsjahr == base_year)
@@ -682,6 +690,8 @@ ggplot(timeline_long, aes(x = Ausgangsjahr, y = index,
 
 The indexed timeline reveals a striking divergence: while median income has risen steadily over the observation period, burglary rates have declined substantially. This inverse macro-trend already raises questions about the assumed positive relationship in H1. If higher income attracted more burglaries, we would expect both lines to move in the same direction — yet they clearly do not. This motivates a closer look at whether the pattern holds at the municipal level, or whether spatial factors such as border proximity might better explain variation in burglary rates.
 
+\newpage
+
 ## Spatial Dimension: Burglary Rates by Border Proximity
 
 The macro-level decline in burglaries may mask important spatial heterogeneity. To investigate whether geography matters, we group municipalities into three categories based on their centroid distance to the Swiss national border and track their burglary rates over time separately.
@@ -720,6 +730,8 @@ ggplot(border_timeline, aes(x = Ausgangsjahr, y = burglary_rate,
 ```
 
 This chart reveals a clear spatial gradient: municipalities within 10 km of the national border consistently exhibit higher burglary rates than those further inland. While all three groups follow the general downward trend observed in Section 4.1, the gap between border-proximate and interior municipalities persists across the entire observation period. This suggests that border proximity is a structurally relevant factor — not merely a transient pattern — and provides initial support for H2.
+
+\newpage
 
 ## Cross-Sectional Analysis: Income vs. Burglary Rate
 
@@ -762,7 +774,9 @@ ggplot(h1_data, aes(x = income_median, y = haeufigkeit_mean)) +
   )
 ```
 
-The scatterplot does not support H1. The regression line slopes slightly *downward*, suggesting that wealthier municipalities tend to have marginally lower — not higher — burglary rates. However, the effect is weak: income explains only about 2% of the variance in burglary rates, and the p-value does not reach conventional significance at the 5% level. A few outliers with very high burglary rates (likely small municipalities where a handful of incidents inflate the rate) are visible in the upper portion of the plot. Given these findings, income alone is a poor predictor of burglary rates. This motivates the inclusion of border proximity as an additional predictor.
+The scatterplot does not support H1. The regression line slopes slightly downward, suggesting that wealthier municipalities tend to have marginally lower — not higher — burglary rates. However, the effect is weak: income explains only about 2% of the variance in burglary rates, and the p-value does not reach conventional significance at the 5% level. A few outliers with very high burglary rates (e.g., smaller municipalities like Kreis 1 of Zurich City, where a handful of incidents inflate the rate) are visible in the upper portion of the plot. Given these findings, income alone is a poor predictor of burglary rates. This motivates the inclusion of border proximity as an additional predictor.
+
+\newpage
 
 ## Municipality Typology: Income--Crime Clusters
 
@@ -1017,7 +1031,7 @@ irr_table <- data.frame(
 knitr::kable(irr_table, row.names = FALSE)
 ```
 
-The IRR table translates the model coefficients into a more intuitive scale. An IRR close to 1 indicates no meaningful effect. The confidence intervals for income and border distance both span 1, reinforcing that neither variable is a reliable predictor. The year variable, by contrast, has an IRR consistently below 1, confirming the steady annual decline in burglary rates.
+The IRR table translates the model coefficients into a more intuitive scale. An IRR close to 1 indicates no meaningful effect. The confidence interval for border distance spans 1, reinforcing that it is not a reliable predictor. Income, by contrast, has an IRR and confidence interval entirely below 1 (CI: `r round(irr_ci["income_10k", 1], 3)`–`r round(irr_ci["income_10k", 2], 3)`), confirming a significant protective association. The year variable similarly has an IRR consistently below 1, confirming the steady annual decline in burglary rates.
 
 ### Interaction Model: Does Income Matter More Near the Border?
 
@@ -1038,7 +1052,9 @@ int_table <- data.frame(
 knitr::kable(int_table, row.names = FALSE)
 ```
 
-The interaction term (Income x Border Distance) is not significant, indicating that the relationship between income and burglary rates does not depend on how close a municipality is to the border. This means that income and border proximity operate independently — or, more precisely, that neither variable has a significant effect regardless of the other's value.
+The interaction term (Income × Border Distance) is statistically significant (p = `r formatC(int_coefs["income_10k:distance_to_border_km", "Pr(>|z|)"], format = "e", digits = 2)`), and notably, including it renders both main effects significant as well — a pattern that was absent in the additive NB model. This suggests that the relationship between income and burglary rates is modulated by geographic proximity to the border.
+
+However, interpreting this result requires caution. The significant interaction indicates a statistical dependency between income and border distance, but the practical relevance is limited. The positive interaction coefficient (+`r round(int_coefs["income_10k:distance_to_border_km", "Estimate"], 4)`) implies that the negative income effect weakens as distance to the border increases — in other words, the protective association of higher income diminishes further from the border. Yet the AIC improvement over the additive NB model is marginal (`r round(AIC(nb_interaction), 1)` vs. `r round(AIC(nb_full), 1)`), suggesting that the interaction, while statistically detectable, adds only modest explanatory power. Given the large sample size (n = `r format(nobs(nb_interaction), big.mark = ",")` complete observations), even small effects can reach significance without being substantively meaningful. We therefore interpret H3 with caution: there is evidence of a statistical interaction, but it does not substantially improve prediction of burglary rates.
 
 ## Model Comparison: Poisson vs. Negative Binomial
 
@@ -1111,7 +1127,9 @@ ggplot(comp_data, aes(x = Variable, y = Estimate, color = Model)) +
   )
 ```
 
-The coefficient estimates are similar between both models, but the NB confidence intervals are substantially wider — reflecting the true uncertainty in the data. Any predictor that is "significant" under both models can be considered robustly supported.
+The coefficient estimates are broadly similar between both models for income and year, but the NB confidence intervals are substantially wider — reflecting the true uncertainty in the data. The most striking difference concerns border distance: in the Poisson model, the coefficient is negative and highly significant (β = −0.007, p ≈ 0), suggesting that municipalities closer to the border experience higher burglary rates. In the Negative Binomial model, the coefficient flips sign (β = +`r round(nb_coefs["distance_to_border_km", "Estimate"], 3)`) and becomes non-significant (p = `r round(nb_coefs["distance_to_border_km", "Pr(>|z|)"], 2)`). This reversal is a direct consequence of accounting for overdispersion: the Poisson model's artificially narrow standard errors produced a spurious result that dissolves under more appropriate modelling assumptions. This finding serves as a cautionary example — had we relied solely on the Poisson model, we would have drawn the opposite conclusion regarding border proximity.
+
+Any predictor that remains significant under both models — in this case, income and year — can be considered robustly supported.
 
 ### Observed vs. Predicted
 
@@ -1201,51 +1219,11 @@ Across all comparison criteria -- the likelihood ratio test, AIC, coefficient un
 
 With the Negative Binomial model established as the appropriate framework, we now formally evaluate each of our three hypotheses based on its coefficient estimates and significance levels.
 
-```{r hypothesis-assessment, results='asis'}
-nb_p_income <- nb_coefs["income_10k", "Pr(>|z|)"]
-nb_p_border <- nb_coefs["distance_to_border_km", "Pr(>|z|)"]
-nb_p_year <- nb_coefs["year_centered", "Pr(>|z|)"]
-int_p <- int_coefs["income_10k:distance_to_border_km", "Pr(>|z|)"]
+**H1 — Income and Burglaries: Not supported (direction reversed):** The NB model yields a statistically significant effect of income (p = `r formatC(nb_coefs["income_10k", "Pr(>|z|)"], format = "e", digits = 2)`), but in the opposite direction to what H1 predicted. Wealthier municipalities show lower, not higher, burglary rates (IRR = `r round(exp(nb_coefs["income_10k", "Estimate"]), 2)` per 10,000 CHF). The "wealthy municipalities attract burglars" hypothesis is thus contradicted by the data — income, if anything, has a protective association.
 
-cat("**H1 — Income and Burglaries:** ")
-if (nb_p_income < 0.05) {
-  direction <- ifelse(nb_coefs["income_10k", "Estimate"] > 0, "positive", "negative")
-  cat(paste0("Significant (p = ", formatC(nb_p_income, format = "e", digits = 2),
-             "). The relationship is **", direction, "** — ",
-             ifelse(direction == "positive",
-                    "wealthier municipalities do show higher burglary rates, supporting H1.",
-                    "wealthier municipalities actually show *lower* burglary rates, contradicting H1."),
-             "\n\n"))
-} else {
-  cat(paste0("Not significant (p = ", formatC(nb_p_income, format = "e", digits = 2),
-             ") in the NB model. Income is not a reliable predictor of burglary rates ",
-             "when overdispersion is properly accounted for. **H1 is not supported.**\n\n"))
-}
+**H2 — Border Proximity and Burglaries: Not supported:** In the NB model, distance to the national border is not statistically significant (p = `r round(nb_coefs["distance_to_border_km", "Pr(>|z|)"], 2)`). While the exploratory analysis revealed a visually compelling spatial gradient, this pattern does not survive formal modelling once overdispersion is accounted for. The Poisson model had found a significant effect, but as demonstrated in Section 5.4.3, this was an artefact of artificially narrow standard errors. H2 is not supported.
 
-cat("**H2 — Border Proximity and Burglaries:** ")
-if (nb_p_border < 0.05) {
-  cat(paste0("Significant (p = ", formatC(nb_p_border, format = "e", digits = 2),
-             "). Each kilometre further from the border is associated with a change in ",
-             "burglary rate by a factor of ", round(exp(nb_coefs["distance_to_border_km", "Estimate"]), 4),
-             ". **H2 is supported.**\n\n"))
-} else {
-  cat(paste0("Not significant (p = ", formatC(nb_p_border, format = "e", digits = 2),
-             ") in the NB model. **H2 is not supported.**\n\n"))
-}
-
-cat("**H3 — Combined Effect:** ")
-if (int_p < 0.05) {
-  cat(paste0("The interaction between income and border distance is significant (p = ",
-             formatC(int_p, format = "e", digits = 2),
-             "). The effect of income on burglaries depends on border proximity. **H3 is supported.**\n"))
-} else {
-  cat(paste0("The interaction between income and border distance is not significant (p = ",
-             formatC(int_p, format = "e", digits = 2),
-             "). While both variables may contribute independently, their combined effect ",
-             "does not improve the model beyond their individual contributions. ",
-             "**H3 is not supported in its interaction form.**\n"))
-}
-```
+**H3 — Combined Effect: Partially supported (statistically significant, practically limited):** The interaction between income and border distance is statistically significant (p = `r formatC(int_coefs["income_10k:distance_to_border_km", "Pr(>|z|)"], format = "e", digits = 2)`), indicating that the effect of income on burglaries depends on border proximity. However, the AIC improvement over the additive model is marginal, and the interaction does not substantially increase the model's predictive power. Given the large sample size, statistical significance alone does not imply practical importance. We therefore characterise H3 as partially supported: there is evidence of a statistical interaction, but it does not meaningfully improve our ability to predict burglary rates.
 
 # Chapter of Choice
 
@@ -1273,13 +1251,13 @@ The application consists of two main tabs:
 
 This analysis set out to test whether anecdotal observations from Basel-Landschaft -- that burglaries concentrate in wealthier, border-proximate municipalities -- hold in the Canton of Zurich. The results paint a more nuanced picture than expected.
 
-**Income is not a meaningful predictor of burglary rates (H1 not supported).** Contrary to the intuition behind H1, wealthier municipalities in Canton Zurich do not experience systematically higher burglary rates. The exploratory scatterplot showed no meaningful relationship, and the Negative Binomial regression confirmed that income is not statistically significant once overdispersion is properly accounted for. This suggests that the "wealthy municipalities attract burglars" narrative, while intuitively appealing, does not hold up to empirical scrutiny in this context.
+**Income is associated with lower burglary rates, contradicting H1.** Contrary to the intuition that affluent households attract property crime, the Negative Binomial regression shows a significant negative relationship between median income and burglary rates (IRR = `r round(exp(nb_coefs["income_10k", "Estimate"]), 2)` per 10,000 CHF, p < 0.001). The exploratory scatterplot already foreshadowed this result, with an R² of just 0.02 and a slightly downward-sloping regression line. Wealthier municipalities in Canton Zurich do not experience systematically higher burglary rates — if anything, the opposite is true.
 
-**Border proximity is not a significant predictor in the formal model (H2 not supported).** While the exploratory analysis revealed a visually striking spatial gradient -- municipalities within 10 km of the border consistently showing higher burglary rates than those further inland -- this pattern does not survive formal modelling. In the Negative Binomial regression, border distance is not statistically significant (p = 0.27). This discrepancy between the visual pattern and the model result likely reflects the high variability between municipalities: while the *average* trend points in the expected direction, the municipality-to-municipality variation is too large for the effect to be statistically reliable. The border proximity pattern observed in the EDA may be confounded with other spatial factors such as urbanisation or transport connectivity.
+**Border proximity is not a reliable predictor of burglary rates (H2 not supported).** The exploratory analysis revealed a visually striking spatial gradient: municipalities within 10 km of the national border consistently showed higher burglary rates than those further inland. However, this pattern does not survive formal modelling. In the Negative Binomial regression, border distance is not statistically significant (p = `r round(nb_coefs["distance_to_border_km", "Pr(>|z|)"], 2)`). Notably, the Poisson model did find a significant effect for border distance, but this result reversed sign and lost significance once overdispersion was properly accounted for — illustrating how model misspecification can produce misleading conclusions. The visual border gradient observed in the EDA may be confounded with other spatial factors such as urbanisation, transport connectivity, or policing intensity, none of which are included in the model.
 
-**The combined effect of income and border proximity does not improve prediction (H3 not supported).** The interaction model did not yield a significant interaction term. Neither income nor border proximity -- individually or in combination -- are reliable predictors of burglary rates in the Negative Binomial framework.
+**The interaction of income and border proximity is statistically detectable but practically limited (H3 partially supported).** The interaction model yields a significant interaction term (p = `r formatC(int_coefs["income_10k:distance_to_border_km", "Pr(>|z|)"], format = "e", digits = 2)`), suggesting that the income–burglary relationship varies with border proximity. However, the improvement in model fit over the additive NB model is marginal (ΔAIC = `r round(AIC(nb_full) - AIC(nb_interaction), 1)`), and the large sample size means that even small effects can reach statistical significance. We therefore characterise this as a partial finding: there is evidence of an interaction, but it does not substantially improve prediction.
 
-**Burglary rates have declined substantially over time.** Across all municipalities and border distance categories, burglary rates have fallen markedly since 2009. The year variable is the strongest and most robust predictor in the model, capturing a canton-wide downward trend that likely reflects broader factors such as improved security measures, changes in policing strategies, or shifts in criminal behaviour. This temporal decline is the clearest finding of the analysis.
+**Burglary rates have declined substantially over time.** The year variable is the strongest and most robust predictor across all models. Burglary rates have fallen markedly since 2009 across all municipalities and all border distance categories, likely reflecting broader factors such as improved security technology, changes in policing strategies, or shifts in criminal behaviour. This temporal decline is the clearest and most consistent finding of the analysis.
 
 ## Limitations
 
@@ -1287,12 +1265,25 @@ Several limitations should be considered when interpreting these results.
 
 **Ecological fallacy.** All analyses operate at the municipal level. Even where visual patterns suggest spatial gradients (e.g., higher burglary rates near the border), we cannot draw conclusions about individual-level behaviour from aggregate data.
 
-**Centroid distance as a proxy.** Border distance is measured from each municipality's geographic centroid to the nearest national border. This is a simplification -- municipalities with irregular shapes or large areas may have actual border distances that differ substantially from the centroid measure. A more granular measure might yield different results.
+**Limited model explanatory power.** While the Negative Binomial model is statistically appropriate for the data, the included covariates — income, border distance, and year — explain only a modest share of the variation in burglary counts. A formal goodness-of-fit measure such as McFadden's pseudo-R² would likely confirm that much of the municipality-level variation remains unexplained. This is consistent with the observation that important predictors are missing from the model.
 
-**Omitted variables.** Neither income nor border distance proved to be significant predictors in the formal model, yet the exploratory analysis showed clear visual patterns. This suggests that important explanatory variables -- such as urbanisation, transport connectivity, policing intensity, or local socioeconomic structure -- are missing from the model and may confound the observed spatial patterns.
+**Omitted variables.** Neither income nor border distance proved to be robust predictors in the formal model, yet the exploratory analysis showed clear visual patterns. This suggests that important explanatory variables — such as urbanisation, transport connectivity, policing intensity, or local socioeconomic structure — are missing from the model and may confound the observed spatial patterns.
 
-**Incomplete income data.** Income data are unavailable for 2023--2024 and for four municipalities prior to 2015, limiting the temporal scope of income-related analyses to 2009--2022. While this affects only the income-dependent analyses and is documented in Section 3.2, it means our models cannot capture the most recent developments.
+**Centroid distance as a proxy.** Border distance is measured from each municipality's geographic centroid to the nearest national border. This is a simplification — municipalities with irregular shapes or large areas may have actual border distances that differ substantially from the centroid measure. A more granular measure (e.g., minimum distance from any point within the municipality boundary) might yield different results.
 
-**Single canton.** The analysis is restricted to Canton Zurich. The patterns observed here may not generalise to other cantons, particularly those with different border configurations (e.g., Basel-Landschaft, Geneva, or Ticino).
+**Incomplete income data.** Income data are unavailable for 2023–2024 and for four municipalities prior to 2015, limiting the temporal scope of income-related analyses to 2009–2022. While the missingness mechanism is well understood and documented in Section 3.2, it means our models cannot capture the most recent developments.
+
+**Single canton.** The analysis is restricted to Canton Zurich. The patterns observed here may not generalise to other cantons, particularly those with different border configurations (e.g., Basel-Landschaft, Geneva, or Ticino) or different economic structures.
 
 # Generative AI Reflection
+
+AI proved to be a powerful tool that definitely supported us in crafting this project. While it was important to us to understand the concepts of R and exciting to dive into the statistics and explore what stories the data could tell, we used available tools such as ChatGPT and Claude to debug code, improve syntax and writing, and broaden our understanding of what we might research with the given data. In all cases, we tried to validate outputs against course materials rather than accepting them uncritically.
+
+That said, especially agentic AI left us stunned by the potential and automation it brings. Watching an agent autonomously iterate on code, diagnose issues, and propose fixes was both impressive and unsettling. The temptation to delegate entire analytical steps was real, and resisting it required conscious effort — we deliberately wrote core model specifications, data joins, and visualisations ourselves, using AI only to accelerate where we were already confident in the direction.
+
+This leaves us with a broader reflection. AI, and especially the upcoming agents, have the potential to change the way we work in a lasting manner. But even as we develop tools that make it easy to outsource tasks, we shouldn't forget that every step builds on the one before it — and that we, whether as a society or individually, need to keep investing in our own progress and our desire to learn. The Applied Information and Data Science programme definitely sits at a useful intersection here: building the foundation needed to understand how AI tools actually work, while learning to apply them effectively, feels increasingly valuable. Finally, the question shouldn't only be what we'll occupy ourselves with, but how we find a way to coexist with algorithms and machines in this disruptive age — following our curiosity and ultimately not losing the spark that brought us here in the first place.
+
+
+
+
+

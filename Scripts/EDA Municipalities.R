@@ -77,7 +77,7 @@ ggplot(selected_timeline, aes(x = Ausgangsjahr, y = Häufigkeitszahl)) +
 # Aggregierte Daten pro Gemeinde
 cluster_data <- data %>%
   st_drop_geometry() %>%
-  group_by(Gemeinde_BFS_Nr, Gemeindename) %>%
+  group_by(Gemeinde_BFS_Nr, Gemeindename, Stadtkreis_Name) %>%
   summarise(
     income_median = median(INCOME_VALUE, na.rm = TRUE),
     haeufigkeit_mean = mean(Häufigkeitszahl, na.rm = TRUE),
@@ -85,7 +85,10 @@ cluster_data <- data %>%
     distance_to_border_km = first(distance_to_border_km),
     .groups = "drop"
   ) %>%
-  filter(!is.na(income_median), !is.na(haeufigkeit_mean))
+  filter(!is.na(income_median), !is.na(haeufigkeit_mean)) %>%
+  mutate(display_name = if_else(Gemeindename == "Zürich",
+                                paste0("Zürich - ", Stadtkreis_Name),
+                                Gemeindename))
 
 # Gemeinden in 4 Quadranten einteilen (Median als Schwelle)
 income_threshold <- median(cluster_data$income_median)
@@ -112,7 +115,7 @@ ggplot(cluster_data, aes(x = income_median, y = haeufigkeit_mean,
   geom_text(data = cluster_data %>%
               filter(haeufigkeit_mean > quantile(haeufigkeit_mean, 0.95) |
                      einwohner_mean > quantile(einwohner_mean, 0.95)),
-            aes(label = Gemeindename),
+            aes(label = display_name),
             size = 3, nudge_y = 0.5, show.legend = FALSE) +
   scale_color_manual(values = c(
     "High Income / High Crime" = "#e41a1c",
