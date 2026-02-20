@@ -273,6 +273,8 @@ The datasets employed in this analysis vary in their temporal completeness acros
 The burglary dataset exhibits minimal missingness, with one municipality showing absent data for reasons that could not be determined from the available documentation. The limited scope of this gap suggests negligible impact on the overall analysis.
 Income data at the cantonal level (municipal aggregation) demonstrate more substantial incompleteness, with several municipalities missing data for specific years. Table 1 provides a detailed breakdown of missing observations by municipality and year, allowing for transparent assessment of potential limitations in temporal coverage.
 
+\newpage
+
 ```{r echo = FALSE, results = 'asis'}
 all_coverage %>%
   filter(missing_years > 0) %>%
@@ -289,11 +291,11 @@ all_coverage %>%
 
 Further investigation revealed that the missing income data were not random but rather systematic, arising from administrative boundary changes. Between 2015 and 2019, several municipalities in Canton Zurich underwent mergers, resulting in the creation of new administrative units with updated BFS (Federal Statistical Office) identifiers. Specifically:
 
-On 1 January 2019, the former municipalities of Ober-, Unterstammheim, and Waltalingen merged to form the new municipality of Stammheim  
-On 1 January 2019, the former municipalities of Hütten and Schönenberg merged into the municipality of Wädenswil  
-On 1 January 2018, the former municipality of Hofstetten merged into the municipality of Elgg  
-On 1 January 2018, the former municipality of Hirzel merged into the municipality of Horgen  
-On 1 January 2016, Kyburg and Illnau-Effretikon merged to form the municipality of Illnau-Effretikon  
+- On 1 January 2019, the former municipalities of Ober-, Unterstammheim, and Waltalingen merged to form the new municipality of Stammheim  
+- On 1 January 2019, the former municipalities of Hütten and Schönenberg merged into the municipality of Wädenswil  
+- On 1 January 2018, the former municipality of Hofstetten merged into the municipality of Elgg  
+- On 1 January 2018, the former municipality of Hirzel merged into the municipality of Horgen  
+- On 1 January 2016, Kyburg and Illnau-Effretikon merged to form the municipality of Illnau-Effretikon  
 
 These mergers resulted in discontinued BFS identifiers for the former municipalities, with new identifiers assigned to the merged entities. Consequently, income data appeared "missing" for the merged municipalities in pre-merger years, as these records remained associated with the former municipal identifiers.
 To address this issue, we implemented a systematic reconciliation procedure. For each merged municipality, we first assessed the completeness of income data under the new identifier. Where gaps existed for pre-merger years, we reconstructed the median income values by averaging data from the constituent former municipalities. This approach ensured temporal continuity in the income variable while maintaining geographic consistency with the current administrative boundaries used in the burglary and spatial datasets.
