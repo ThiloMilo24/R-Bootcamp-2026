@@ -40,16 +40,15 @@ R-Bootcamp-2026/
 │   ├── EDA Municipalities.R            # Municipality timelines and income-crime clusters
 │   ├── Regression Poisson.R            # Poisson count regression models
 │   ├── Regression NegBin.R             # Negative Binomial models + IRR
-│   └── Model Comparison.R             # Poisson vs. NB comparison (LR test, AIC, residuals)
+│   └── Model Comparison.R              # Poisson vs. NB comparison (LR test, AIC, residuals)
 ├── App/
 │   └── app.R                           # Interactive Shiny web application (Chapter of Choice)
-├── Data/                               # All source datasets (CSV + GeoPackage)
-└── R-Bootcamp-2026.Rproj              # RStudio project file
+└── Data/                               # All source datasets (CSV + GeoPackage)
 ```
 
 ## How to Reproduce
 
-1. Open `R-Bootcamp-2026.Rproj` in RStudio.
+1. Run `Data Preparation.R`
 2. Ensure the required packages are installed: `readr`, `dplyr`, `MASS`, `sf`, `ggplot2`, `tidyr`, `scales`, `gridExtra`, `kableExtra`.
 3. Knit `Report.rmd` to PDF (uses `xelatex` engine).
 4. Individual analysis scripts in `Scripts/` can be run standalone after running `Data Preparation.R`.
