@@ -643,7 +643,9 @@ timeline_data <- data %>%
     income = mean(INCOME_VALUE, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  filter(!is.na(income))
+  filter(!is.na(income)) %>%
+  filter((Ausgangsjahr <= 2022))
+
 
 base_year <- min(timeline_data$Ausgangsjahr)
 base_vals <- timeline_data %>% filter(Ausgangsjahr == base_year)
