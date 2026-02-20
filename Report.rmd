@@ -1,7 +1,7 @@
 ---
-title: "Income, Crime, and Borders in Canton Zurich"
+title: "Burglary, Income, and Border Proximity: A Municipal-Level Analysis of Canton Zurich"
 author: "Thilo Holstein, Hans Joseph Thalathara"
-date: "2026-01-26"
+date: "2026-02-20"
 output:
   pdf_document:
     latex_engine: xelatex
@@ -36,7 +36,7 @@ source("Scripts/Data Preparation.R")
 
 Burglary patterns across Swiss municipalities have long been a subject of practical interest for law enforcement agencies and local communities alike. In the Canton of Basel-Landschaft, anecdotal observations from police practitioners suggest that burglaries tend to cluster in wealthier municipalities located near Switzerland's international borders. The reasoning behind this observation is intuitive: affluent households may present more attractive targets, and proximity to a border could facilitate quick escape across national jurisdictions. If true, this pattern would have direct implications for resource allocation in crime prevention.
 
-However, anecdotal observations -- no matter how consistent -- are not the same as empirical evidence. What appears as a clear pattern in one canton may not hold elsewhere, and apparent correlations can dissolve once confounding factors are accounted for. This analysis takes those observations as a starting point and asks: do they generalise?
+However, anecdotal observations, no matter how consistent, are not the same as empirical evidence. What appears as a clear pattern in one canton may not hold elsewhere, and apparent correlations can dissolve once confounding factors are accounted for. This analysis takes those observations as a starting point and asks: do they generalise?
 
 Specifically, we examine whether the same relationship between income, border proximity, and burglary rates exists in the Canton of Zurich -- a canton with a different economic structure, geographic configuration, and population density than Basel-Landschaft. By combining burglary statistics, income data, and geographic boundary data at the municipal level, we test these assumptions empirically using both exploratory visualisation and formal count regression models. The goal is not to confirm the Basel-Landschaft narrative, but to evaluate it critically in a new context.
 
@@ -377,7 +377,7 @@ income_kt <- income_kt %>%
 
 \newpage
 
-After the merger reconciliation above, 329 of 2,735 observations (12.0%) still have missing values in the income variable (`INCOME_VALUE`). These remaining gaps arise from two causes:
+After the merger reconciliation above, 329 of 2,735 observations (12.0%) still had missing values in the income variable (`INCOME_VALUE`). These remaining gaps arise from two causes:
 
 - **2023 (158 missing):** Municipal income statistics for Canton Zurich had not yet been published at the time of analysis. Only the 12 city districts of Zurich have income data for this year, sourced from the separate city-level dataset.
 - **2024 (171 missing):** No income data are available for any municipality or city district.
@@ -1242,9 +1242,9 @@ The application consists of two main tabs:
 
 **Map** — A choropleth map of Canton Zurich rendered with the `leaflet` package. The user can select any of four variables (median income, population, total burglaries, or burglary rate per 1,000 inhabitants), choose a year via a slider, and optionally exclude known outliers. Polygons are coloured using a continuous viridis palette, and hovering over a municipality displays the exact value. The map updates dynamically without reloading the page.
 
-**Data Explorer** — A municipality- and district-level panel showing four time-series plots side by side: population, median income, burglary trends (broken down by type), and burglary rate per 1,000 inhabitants. All locations in the canton are accessible via a dropdown. For municipalities that underwent administrative mergers between 2015 and 2019, the income plot additionally visualises the pre-merger constituent municipalities, making the data continuity transparent to the user.
+**Data Explorer** — A municipality- and district-level panel showing four time-series plots side by side: population, median income, burglary trends (broken down by type), and burglary rate per 1,000 inhabitants. All locations in the canton are accessible via a dropdown. For municipalities that underwent administrative mergers between 2015 and 2019, the income plot additionally visualises the pre-merger constituent municipalities, making the data continuity transparent to the user.  
 
-[--> Link to Shiny Webapp](https://elenoar12-rbootcamp-holstein-thalathara.share.connect.posit.cloud/)
+[&rarr; Link to Shiny Webapp](https://elenoar12-rbootcamp-holstein-thalathara.share.connect.posit.cloud/)
 
 # Conclusions
 
@@ -1265,6 +1265,8 @@ This analysis set out to test whether anecdotal observations from Basel-Landscha
 Several limitations should be considered when interpreting these results.
 
 **Commercial area density and building-use composition.** Kreis 1 emerges as a clear outlier in burglary rates per 1,000 inhabitants. A likely contributing factor is its exceptionally high concentration of commercial properties. Particularly, high-value retail establishments may attract a qualitatively different type of burglary than residential break-ins. The burglary data used in this analysis does not distinguish between household and commercial premises, meaning that municipalities or districts with a high density of shops, offices, or other non-residential buildings cannot be meaningfully compared to predominantly residential areas on the basis of raw burglary rates alone. Incorporating a measure of commercial land-use density or building-use composition into the model would likely improve both its explanatory power and the interpretability of spatial patterns, particularly for urban centres such as Kreis 1.
+
+**Median income as an incomplete measure of wealth distribution.** The income predictor used in this analysis reflects the median i.e., the 50th percentile of municipal income. While the median is robust to extreme values, it provides no information about the spread or skewness of the income distribution within a municipality. This is a meaningful limitation in the context of burglary research, where it may not be average wealth that attracts offenders, but the presence of high-value targets at the upper end of the distribution. A city district such as Kreis 1, for example, may have a deceptively moderate median income while simultaneously containing a disproportionate share of very high-income households and businesses. Without access to measures such as the Gini coefficient, the 90th income percentile, or the interquartile range, the model cannot capture this within-municipality heterogeneity. As a result, the income predictor may systematically underperform in economically polarised areas, and its null finding in the regression model should be interpreted with this caveat in mind.
 
 **Ecological fallacy.** All analyses operate at the municipal level. Even where visual patterns suggest spatial gradients (e.g., higher burglary rates near the border), we cannot draw conclusions about individual-level behaviour from aggregate data.
 

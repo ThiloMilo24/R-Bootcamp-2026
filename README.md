@@ -1,8 +1,8 @@
 # R-Bootcamp-2026
 
-**Income, Crime, and Borders in Canton Zurich**
+**Burglary, Income, and Border Proximity: A Municipal-Level Analysis of Canton Zurich**
 
-HSLU R Bootcamp group assignment by Thilo Holstein and Hans Josef Thalathara.
+HSLU R Bootcamp group assignment by Thilo Holstein and Hans Joseph Thalathara.
 
 This project investigates whether anecdotal observations from Basel-Landschaft -- that burglaries concentrate in wealthier, border-proximate municipalities -- hold in the Canton of Zurich. We combine burglary statistics, income data, and geographic boundary data at the municipal level and test these assumptions using exploratory visualisation and formal count regression models (Poisson and Negative Binomial).
 
