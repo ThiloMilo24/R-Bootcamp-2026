@@ -402,7 +402,7 @@ ui <- fluidPage(
       }
     "))
   ),
-  titlePanel("Canton Zurich - Income and Burglary Analysis"),
+  titlePanel("Burglary, Income, and Border Proximity: A Municipal-Level Analysis of Canton Zurich"),
 
   tabsetPanel(
     tabPanel("Map",
